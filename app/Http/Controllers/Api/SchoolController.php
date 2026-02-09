@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use App\Models\Subscription;
 
 class SchoolController extends Controller
 {
@@ -34,106 +35,113 @@ class SchoolController extends Controller
     }
 
     public function store(Request $request)
-    {
-        // Only super admin can create schools
-        if (!auth()->user() || !auth()->user()->isSuperAdmin()) {
-            return response()->json(['message' => 'Unauthorized'], 403);
+{
+    // Only super admin can create schools
+    if (!auth()->user() || !auth()->user()->isSuperAdmin()) {
+        return response()->json(['message' => 'Unauthorized'], 403);
+    }
+
+    $validator = Validator::make($request->all(), [
+        'owner' => 'required|string|max:255',
+        'name' => 'required|string|max:255',
+        'email' => 'required|email|unique:schools,email|unique:users,email',
+        'phone' => 'required|string|max:20',
+        'address' => 'nullable|string',
+        'logo' => 'nullable|file|image|max:2048',
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $validator->errors()
+        ], 422);
+    }
+
+    try {
+        // Handle logo upload if present
+        $logoPath = null;
+        if ($request->hasFile('logo')) {
+            $path = $request->file('logo')->store('school_logos', 'public');
+            $logoPath = '/storage/' . $path;
         }
 
-        $validator = Validator::make($request->all(), [
-            'owner' => 'required|string|max:255',
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:schools,email|unique:users,email',
-            'phone' => 'required|string|max:20',
-            'address' => 'nullable|string',
-            'logo' => 'nullable|file|image|max:2048',
+        // Create school (locked by default)
+        $school = School::create([
+            'owner' => $request->owner,
+            'name' => $request->name,
+            'email' => $request->email,
+            'phone' => $request->phone,
+            'address' => $request->address,
+            'logo' => $logoPath,
+            'is_unlocked' => false,
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        try {
-            // Handle logo upload if present
-            $logoPath = null;
-            if ($request->hasFile('logo')) {
-                $path = $request->file('logo')->store('school_logos', 'public');
-                $logoPath = '/storage/' . $path;
-            }
-
-            // Create school (locked by default)
-            $school = School::create([
-                'owner' => $request->owner,
-                'name' => $request->name,
-                'email' => $request->email,
-                'phone' => $request->phone,
-                'address' => $request->address,
-                'logo' => $logoPath,
-                'is_unlocked' => false,
-            ]);
-
-            // Create the school admin user
-            // Use phone as temporary password
-            $temporaryPassword = $request->phone;
-            
-            $adminUser = User::create([
-                'name' => $request->owner,
-                'email' => $request->email,
-                'password' => Hash::make($temporaryPassword),
-                'role' => 'admin',
+        // Assign trial subscription if within first 10 schools
+        if (School::count() <= 10) {
+            Subscription::create([
                 'school_id' => $school->id,
-                'phone' => $request->phone,
-                'is_active' => true,
-                'must_change_password' => true,
+                'plan' => 'trial',
+                'is_trial' => true,
+                'trial_expires_at' => now()->addMonths(4),
             ]);
-
-            // Prepare credentials for immediate display
-            $credentials = [
-                'email' => $request->email,
-                'password' => $temporaryPassword, // Show phone as password
-                'schoolName' => $school->name,
-                'owner' => $school->owner,
-                'note' => 'Use your phone number as temporary password. You will be forced to change it on first login.'
-            ];
-
-            // Send credentials email (non-blocking)
-            try {
-                $frontendChangePasswordUrl = config('app.frontend_url') 
-                    ? rtrim(config('app.frontend_url'), '/') . '/change-password'
-                    : url('/change-password');
-
-                Mail::to($adminUser->email)->send(new \App\Mail\SchoolCredentialsMail(
-                    $school, 
-                    $adminUser->email, 
-                    $temporaryPassword, 
-                    $frontendChangePasswordUrl
-                ));
-            } catch (\Exception $e) {
-                Log::error('Failed to send SchoolCredentialsMail: ' . $e->getMessage());
-                // Don't fail the request if email fails
-            }
-
-            return response()->json([
-                'message' => 'School created successfully',
-                'school' => $school,
-                'admin_credentials' => $credentials, // This will be used for immediate display
-                'login_credentials' => [
-                    'username' => $adminUser->email,
-                    'password' => $temporaryPassword // Include password in response
-                ]
-            ], 201);
-
-        } catch (\Exception $e) {
-            Log::error('School creation failed: ' . $e->getMessage());
-            
-            return response()->json([
-                'message' => 'School creation failed: ' . $e->getMessage()
-            ], 500);
         }
+
+        // Create the school admin user
+        $temporaryPassword = $request->phone; // or use a custom password
+
+        $adminUser = User::create([
+            'name' => $request->owner,
+            'email' => $request->email,
+            'password' => Hash::make($temporaryPassword),
+            'role' => 'admin',
+            'school_id' => $school->id,
+            'phone' => $request->phone,
+            'is_active' => true,
+            'must_change_password' => true,
+        ]);
+
+        // Prepare credentials for immediate display
+        $credentials = [
+            'email' => $request->email,
+            'password' => $temporaryPassword,
+            'schoolName' => $school->name,
+            'owner' => $school->owner,
+            'note' => 'Use your phone number as temporary password. You will be forced to change it on first login.'
+        ];
+
+        // Send credentials email (non-blocking)
+        try {
+            $frontendChangePasswordUrl = config('app.frontend_url') 
+                ? rtrim(config('app.frontend_url'), '/') . '/change-password'
+                : url('/change-password');
+
+            Mail::to($adminUser->email)->send(new \App\Mail\SchoolCredentialsMail(
+                $school, 
+                $adminUser->email, 
+                $temporaryPassword, 
+                $frontendChangePasswordUrl
+            ));
+        } catch (\Exception $e) {
+            Log::error('Failed to send SchoolCredentialsMail: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'message' => 'School created successfully',
+            'school' => $school,
+            'admin_credentials' => $credentials,
+            'login_credentials' => [
+                'username' => $adminUser->email,
+                'password' => $temporaryPassword
+            ]
+        ], 201);
+
+    } catch (\Exception $e) {
+        Log::error('School creation failed: ' . $e->getMessage());
+        return response()->json([
+            'message' => 'School creation failed: ' . $e->getMessage()
+        ], 500);
     }
+}
 
     public function show($id)
     {

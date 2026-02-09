@@ -97,7 +97,45 @@ Route::middleware(['jwt.auth'])->prefix('v1')->group(function () {
         Route::post('/refresh', [AuthController::class, 'refresh']);
         Route::put('/profile', [AuthController::class, 'updateProfile']);
         Route::post('/change-password', [AuthController::class, 'changePassword']);
+
+
+        /*
+|--------------------------------------------------------------------------
+| DASHBOARD HELPERS (SELF-CONTEXT)
+|--------------------------------------------------------------------------
+*/
+
+/*
+| EMPLOYEE DASHBOARD
+*/
+Route::prefix('employee')->group(function () {
+    Route::get('/dashboard/stats', [EmployeeController::class, 'dashboardStats']);
+    Route::get('/dashboard/classes', [EmployeeController::class, 'myClasses']);
+    Route::get('/dashboard/pending-results', [ResultController::class, 'pendingGrading']);
+});
+
+/*
+| STUDENT DASHBOARD
+*/
+Route::prefix('student')->group(function () {
+    Route::get('/dashboard/stats', [StudentController::class, 'dashboardStats']);
+    Route::get('/dashboard/attendance', [AttendanceController::class, 'myAttendance']);
+    Route::get('/dashboard/results', [ResultController::class, 'myGrades']);
+    Route::get('/dashboard/subjects', [SubjectController::class, 'mySubjects']);
+    Route::get('/dashboard/fees', [FeePaymentController::class, 'myBalance']);
+});
+
+/*
+| PARENT DASHBOARD
+*/
+Route::prefix('parent')->group(function () {
+    Route::get('/dashboard/stats', [ParentController::class, 'dashboardStats']);
+    Route::get('/dashboard/children', [StudentController::class, 'myChildren']);
+    Route::get('/dashboard/attendance', [AttendanceController::class, 'childrenAttendance']);
+    Route::get('/dashboard/fees', [FeePaymentController::class, 'childrenBalance']);
     });
+
+});
 
     /*
     |--------------------------------------------------------------------------
