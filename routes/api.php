@@ -253,6 +253,8 @@ Route::prefix('parent')->group(function () {
         Route::post('/', [ResultController::class, 'store']);
         Route::put('/', [ResultController::class, 'update']);
         Route::delete('/', [ResultController::class, 'destroy']);
+        Route::get('/reports/student', [ResultController::class, 'studentReport']);
+
     });
 
     /*

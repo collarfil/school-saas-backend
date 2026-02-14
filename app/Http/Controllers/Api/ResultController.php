@@ -336,4 +336,62 @@ class ResultController extends Controller
             'data' => $result
         ]);
     }
+    public function studentReport(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'school_id' => 'required|exists:schools,id',
+            'student_id' => 'required|exists:students,id',
+            'school_session_id' => 'required|exists:school_sessions,id',
+            'term' => 'required|string'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Ensure student belongs to school
+        $student = Student::where('id', $request->student_id)
+            ->where('school_id', $request->school_id)
+            ->firstOrFail();
+
+        $results = Result::where([
+            'school_id' => $request->school_id,
+            'student_id' => $request->student_id,
+            'school_session_id' => $request->school_session_id,
+            'term' => $request->term,
+        ])
+        ->with(['subject', 'school', 'schoolSession'])
+        ->get();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'student' => $student,
+                'school' => $results->first()?->school,
+                'session' => $results->first()?->schoolSession,
+                'term' => $request->term,
+                'results' => $results
+            ]
+        ]);
+        $classResults = Result::where([
+        'school_id' => $request->school_id,
+        'school_session_id' => $request->school_session_id,
+        'term' => $request->term,
+        ])
+        ->get()
+        ->groupBy('student_id')
+        ->map(function ($items) {
+            return $items->sum('total');
+        })
+        ->sortDesc()
+        ->values();
+
+        $studentTotal = $results->sum('total');
+        $position = $classResults->search($studentTotal) + 1;
+
+    }
+
 }

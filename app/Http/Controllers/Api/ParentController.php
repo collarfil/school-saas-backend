@@ -45,47 +45,61 @@ class ParentController extends Controller
         }
     }
 
-    public function store(Request $request)
-    {
-        try {
-            $validated = $request->validate([
-                'name' => 'required|string|max:255',
-                'phone' => 'required|string|max:20',
-                'email' => 'nullable|email',
-                'address' => 'nullable|string',
-                'school_id' => 'required|exists:schools,id'
-            ]);
+        public function store(Request $request)
+        {
+            try {
+                $validated = $request->validate([
+                    'name' => 'required|string|max:255',
+                    'phone' => 'required|string|max:20',
+                    'email' => 'nullable|email',
+                    'address' => 'nullable|string',
+                    'school_id' => 'required|exists:schools,id',
+                    // ✅ NEW
+                    'delivery_method' => 'nullable|in:email,print,both'
+                ]);
 
-            $exists = Parents::where('school_id', $validated['school_id'])
-                ->where('phone', $validated['phone'])
-                ->exists();
+                $exists = Parents::where('school_id', $validated['school_id'])
+                    ->where('phone', $validated['phone'])
+                    ->exists();
 
-            if ($exists) {
+                if ($exists) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Parent already exists with this phone'
+                    ], 422);
+                }
+
+                $parent = Parents::create($validated);
+
+                // ✅ UPDATED
+                $deliveryMethod = $validated['delivery_method'] ?? 'print';
+
+                $result = UserCreationService::createParentUser(
+                    $parent,
+                    $deliveryMethod
+                );
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Parent created successfully',
+                    'data' => $parent->load(['school','students']),
+                    // ✅ ONLY RETURN WHEN NOT EMAIL-ONLY
+                    'credentials' => $deliveryMethod !== 'email' ? [
+                        'name' => $result['user']->name,
+                        'username' => $result['user']->email,
+                        'password' => $result['plain_password'],
+                    ] : null
+                ], 201);
+
+            } catch (\Exception $e) {
+                Log::error($e->getMessage());
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Parent already exists with this phone'
-                ], 422);
+                    'message' => 'Failed to create parent'
+                ], 500);
             }
-
-            $parent = Parents::create($validated);
-
-            // ✅ AUTO CREATE LOGIN USER
-            UserCreationService::createParentUser($parent);
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Parent created successfully',
-                'data' => $parent->load(['school','students'])
-            ], 201);
-
-        } catch (\Exception $e) {
-            Log::error($e->getMessage());
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to create parent'
-            ], 500);
         }
-    }
+
 
     public function show(Request $request, $id)
     {

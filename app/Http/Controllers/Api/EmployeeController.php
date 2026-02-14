@@ -84,68 +84,76 @@ class EmployeeController extends Controller
         }
     }
 
-    public function store(Request $request)
-{
-    try {
-        $user = auth()->user();
+        public function store(Request $request)
+        {
+            try {
+                $user = auth()->user();
 
-        if (!$user || !$user->school_id) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Unauthorized or school not assigned'
-            ], 403);
+                if (!$user || !$user->school_id) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Unauthorized or school not assigned'
+                    ], 403);
+                }
+
+                $validated = $request->validate([
+                    'name'  => 'required|string|max:255',
+                    'email' => 'required|email|unique:employees,email',
+                    'phone' => 'nullable|string|max:20',
+                    'role'  => 'required|string|max:50',
+                    // ✅ NEW
+                    'delivery_method' => 'nullable|in:email,print,both'
+                ]);
+
+                $employee = Employee::create([
+                    'school_id' => $user->school_id,
+                    'name'      => $validated['name'],
+                    'email'     => $validated['email'],
+                    'phone'     => $validated['phone'] ?? null,
+                    'role'      => $validated['role'],
+                ]);
+
+                // ✅ UPDATED
+                $deliveryMethod = $validated['delivery_method'] ?? 'print';
+
+                $result = UserCreationService::createEmployeeUser(
+                    $employee,
+                    $deliveryMethod
+                );
+
+                return response()->json([
+                    'status'  => 'success',
+                    'message' => 'Employee created successfully',
+                    'data'    => $employee,
+                    // ✅ ONLY RETURN WHEN NOT EMAIL-ONLY
+                    'credentials' => $deliveryMethod !== 'email' ? [
+                        'name' => $result['user']->name,
+                        'username' => $result['user']->email,
+                        'password' => $result['plain_password'],
+                    ] : null
+                ], 201);
+
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => $e->errors()['email'][0] ?? 'Validation error',
+                    'errors' => $e->errors()
+                ], 422);
+
+            } catch (\Throwable $e) {
+                Log::error('Employee store error', [
+                    'message' => $e->getMessage(),
+                    'line' => $e->getLine(),
+                    'file' => $e->getFile(),
+                ]);
+
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Failed to create employee'
+                ], 500);
+            }
         }
 
-        /** ------------------------------------
-         * VALIDATION
-         * -----------------------------------*/
-        $validated = $request->validate([
-            'name'  => 'required|string|max:255',
-            'email' => 'required|email|unique:employees,email',
-            'phone' => 'nullable|string|max:20',
-            'role'  => 'required|string|max:50',
-        ]);
-
-        /** ------------------------------------
-         * CREATE EMPLOYEE
-         * -----------------------------------*/
-        $employee = Employee::create([
-            'school_id' => $user->school_id,
-            'name'      => $validated['name'],
-            'email'     => $validated['email'],
-            'phone'     => $validated['phone'] ?? null,
-            'role'      => $validated['role'],
-        ]);
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Employee created successfully',
-            'data'    => $employee
-        ], 201);
-
-    } catch (\Illuminate\Validation\ValidationException $e) {
-
-        // 👇 THIS IS THE IMPORTANT PART
-        return response()->json([
-            'status' => 'error',
-            'message' => $e->errors()['email'][0] ?? 'Validation error',
-            'errors' => $e->errors()
-        ], 422);
-
-    } catch (\Throwable $e) {
-
-        Log::error('Employee store error', [
-            'message' => $e->getMessage(),
-            'line' => $e->getLine(),
-            'file' => $e->getFile(),
-        ]);
-
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Failed to create employee'
-        ], 500);
-    }
-}
 
 
     public function update(Request $request, $id)

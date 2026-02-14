@@ -64,51 +64,66 @@ class StudentController extends Controller
         }
     }
 
-    public function store(Request $request)
-    {
-        try {
-            $validated = $request->validate([
-                'grade_id' => 'required|exists:grades,id',
-                'parents_id' => 'nullable|exists:parents,id',
-                'name' => 'required|string|max:255',
-                'admission_number' => 'required|string',
-                'email' => 'nullable|email',
-                'gender' => 'nullable|in:Male,Female,Other',
-                'school_id' => 'required|exists:schools,id'
-            ]);
+        public function store(Request $request)
+        {
+            try {
+                $validated = $request->validate([
+                    'grade_id' => 'required|exists:grades,id',
+                    'parents_id' => 'nullable|exists:parents,id',
+                    'name' => 'required|string|max:255',
+                    'admission_number' => 'required|string',
+                    'email' => 'nullable|email',
+                    'gender' => 'nullable|in:Male,Female,Other',
+                    'school_id' => 'required|exists:schools,id',
+                    // ✅ NEW
+                    'delivery_method' => 'nullable|in:email,print,both'
+                ]);
 
-            $exists = Student::where('school_id', $validated['school_id'])
-                ->where('admission_number', $validated['admission_number'])
-                ->exists();
+                $exists = Student::where('school_id', $validated['school_id'])
+                    ->where('admission_number', $validated['admission_number'])
+                    ->exists();
 
-            if ($exists) {
+                if ($exists) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Admission number already exists in this school'
+                    ], 422);
+                }
+
+                $validated['is_active'] = $validated['is_active'] ?? true;
+
+                $student = Student::create($validated);
+
+                // ✅ UPDATED
+                $deliveryMethod = $validated['delivery_method'] ?? 'print';
+
+                $result = UserCreationService::createStudentUser(
+                    $student,
+                    $deliveryMethod
+                );
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Student created successfully',
+                    'data' => $student->load(['grade','parent','school']),
+                    // ✅ ONLY RETURN WHEN NOT EMAIL-ONLY
+                    'credentials' => $deliveryMethod !== 'email' ? [
+                        'name' => $result['user']->name,
+                        'username' => $result['user']->email,
+                        'password' => $result['plain_password'],
+                    ] : null
+                ], 201);
+
+            } catch (\Exception $e) {
+                Log::error($e->getMessage());
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Admission number already exists in this school'
-                ], 422);
+                    'message' => 'Failed to create student'
+                ], 500);
             }
-
-            $validated['is_active'] = $validated['is_active'] ?? true;
-
-            $student = Student::create($validated);
-
-            // ✅ AUTO CREATE LOGIN USER
-            UserCreationService::createStudentUser($student);
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Student created successfully',
-                'data' => $student->load(['grade','parent','school'])
-            ], 201);
-
-        } catch (\Exception $e) {
-            Log::error($e->getMessage());
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to create student'
-            ], 500);
         }
-    }
+
+
     public function show(Request $request, $id)
     {
         try {
