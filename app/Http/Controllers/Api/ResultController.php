@@ -220,7 +220,29 @@ class ResultController extends Controller
             'message' => 'Result updated successfully',
             'data' => $result->fresh(['student', 'grade', 'subject', 'schoolSession', 'school'])
         ]);
+        if ($result->status === 'published') {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Result already published and locked'
+        ], 403);
     }
+
+}
+
+    public function publishResults(Request $request)
+    {
+        Result::where([
+            'school_id' => $request->school_id,
+            'school_session_id' => $request->school_session_id,
+            'term' => $request->term
+        ])->update(['status' => 'published']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Results published and locked'
+        ]);
+    }
+
 
     public function destroy(Request $request, $id)
     {
@@ -392,6 +414,19 @@ class ResultController extends Controller
         $studentTotal = $results->sum('total');
         $position = $classResults->search($studentTotal) + 1;
 
+    }
+    public function approveResults(Request $request)
+    {
+        Result::where([
+            'school_id' => $request->school_id,
+            'school_session_id' => $request->school_session_id,
+            'term' => $request->term
+        ])->update(['status' => 'approved']);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Results approved successfully'
+        ]);
     }
 
 }

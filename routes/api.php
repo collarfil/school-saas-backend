@@ -254,6 +254,8 @@ Route::prefix('parent')->group(function () {
         Route::put('/', [ResultController::class, 'update']);
         Route::delete('/', [ResultController::class, 'destroy']);
         Route::get('/reports/student', [ResultController::class, 'studentReport']);
+        Route::post('/results/publish', [ResultController::class, 'publishResults']);
+
 
     });
 

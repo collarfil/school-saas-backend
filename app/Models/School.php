@@ -11,7 +11,7 @@ class School extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'owner', 'name', 'email', 'phone', 'address', 'logo', 'is_unlocked'
+        'owner', 'name', 'email', 'phone', 'address', 'logo', 'is_unlocked', 'principal_signature'
     ];
 
     protected $casts = [
