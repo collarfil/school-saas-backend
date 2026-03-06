@@ -1,13 +1,16 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Api;
 
 use Illuminate\Http\Request;
-use App\Http\Controllers\Income;
-use App\Http\Controllers\Expense;
-use App\Http\Controllers\Validator;
+use App\Models\Income;
+use App\Models\Expense;     
+use Illuminate\Support\Facades\Validator;
+use App\Http\Controllers\Controller;
+
 
 class FinanceController extends Controller
+
 {
     public function financeReport(Request $request)
 {

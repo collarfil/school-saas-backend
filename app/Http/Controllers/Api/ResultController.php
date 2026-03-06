@@ -188,9 +188,18 @@ class ResultController extends Controller
         if (!$result) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Result not found or does not belong to this school.'
+                'message' => 'Result not found'
             ], 404);
         }
+
+        // 🔐 BLOCK IF PUBLISHED
+        if ($result->status === 'published') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Result already published and locked'
+            ], 403);
+        }
+
 
         // If scores are being updated, recalculate total and grade
         if ($request->has('score') || $request->has('score2')) {
@@ -374,7 +383,6 @@ class ResultController extends Controller
             ], 422);
         }
 
-        // Ensure student belongs to school
         $student = Student::where('id', $request->student_id)
             ->where('school_id', $request->school_id)
             ->firstOrFail();
@@ -388,6 +396,26 @@ class ResultController extends Controller
         ->with(['subject', 'school', 'schoolSession'])
         ->get();
 
+        $studentTotal = $results->sum('total');
+
+        // 🔥 Calculate class ranking
+        $classTotals = Result::where([
+            'school_id' => $request->school_id,
+            'school_session_id' => $request->school_session_id,
+            'term' => $request->term,
+        ])
+        ->get()
+        ->groupBy('student_id')
+        ->map(fn($items) => $items->sum('total'))
+        ->sortDesc()
+        ->values();
+
+        $position = $classTotals->search($studentTotal) + 1;
+
+        $average = $results->count() > 0
+            ? round($studentTotal / $results->count(), 2)
+            : 0;
+
         return response()->json([
             'status' => 'success',
             'data' => [
@@ -395,26 +423,14 @@ class ResultController extends Controller
                 'school' => $results->first()?->school,
                 'session' => $results->first()?->schoolSession,
                 'term' => $request->term,
-                'results' => $results
+                'results' => $results,
+                'total' => $studentTotal,
+                'average' => $average,
+                'position' => $position
             ]
         ]);
-        $classResults = Result::where([
-        'school_id' => $request->school_id,
-        'school_session_id' => $request->school_session_id,
-        'term' => $request->term,
-        ])
-        ->get()
-        ->groupBy('student_id')
-        ->map(function ($items) {
-            return $items->sum('total');
-        })
-        ->sortDesc()
-        ->values();
-
-        $studentTotal = $results->sum('total');
-        $position = $classResults->search($studentTotal) + 1;
-
     }
+
     public function approveResults(Request $request)
     {
         Result::where([

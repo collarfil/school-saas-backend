@@ -2,6 +2,10 @@
 
 use Illuminate\Support\Facades\Route;
 
+use App\Http\Controllers\Api\MessageController;
+use App\Http\Controllers\Api\ConversationController;
+
+
 /*
 |--------------------------------------------------------------------------
 | API Controllers
@@ -35,6 +39,7 @@ use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\SubscriptionPricingController;
 use App\Http\Controllers\Api\IncomeController;
 use App\Http\Controllers\Api\ExpenseController;
+use App\Http\Controllers\Api\FinanceController;
 
 // ACADEMICS
 use App\Http\Controllers\Api\ResultController;
@@ -44,6 +49,24 @@ use App\Http\Controllers\Api\AttendanceController;
 // DASHBOARDS
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\SchoolDashboardController;
+
+
+// MESSAGES & NOTIFICATIONS
+use Illuminate\Support\Facades\Broadcast;
+use App\Http\Controllers\Api\VideoController;
+use App\Events\TestBroadcast;
+
+
+Route::get('/test-broadcast', function () {
+    broadcast(new TestBroadcast("Hello Reverb"));
+    return "Event Fired";
+});
+
+Broadcast::channel('conversation.{id}', function ($user, $id) {
+    return \App\Models\ConversationParticipant::where('conversation_id', $id)
+        ->where('user_id', $user->id)
+        ->exists();
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -85,6 +108,22 @@ Route::prefix('v1')->group(function () {
 |--------------------------------------------------------------------------
 */
 Route::middleware(['jwt.auth'])->prefix('v1')->group(function () {
+    Route::post('/finance/report', [FinanceController::class, 'financeReport']);
+
+     // Conversations
+    Route::get('/conversations', [ConversationController::class, 'index']);
+    Route::get('/conversations/{conversationId}/messages', [MessageController::class, 'index']);
+    Route::post('/conversations/{conversationId}/messages', [MessageController::class, 'store']);
+    
+    // Video signaling
+    Route::post('/video/signal', [VideoController::class, 'signal']);
+    
+    // Broadcasting auth
+    Route::post('/broadcasting/auth', function (Illuminate\Http\Request $request) {
+        return Broadcast::auth($request);
+    });
+
+   
 
     /*
     |--------------------------------------------------------------------------
@@ -97,7 +136,7 @@ Route::middleware(['jwt.auth'])->prefix('v1')->group(function () {
         Route::post('/refresh', [AuthController::class, 'refresh']);
         Route::put('/profile', [AuthController::class, 'updateProfile']);
         Route::post('/change-password', [AuthController::class, 'changePassword']);
-
+        
 
         /*
 |--------------------------------------------------------------------------
@@ -137,6 +176,7 @@ Route::prefix('parent')->group(function () {
 
 });
 
+
     /*
     |--------------------------------------------------------------------------
     | DASHBOARDS
@@ -159,6 +199,15 @@ Route::prefix('parent')->group(function () {
     */
     Route::apiResource('students', StudentController::class);
 
+    /*
+    |--------------------------------------------------------------------------
+    | MESSAGES
+    |--------------------------------------------------------------------------
+    */
+    Route::post('/broadcasting/auth', function (Illuminate\Http\Request $request) {
+    return Broadcast::auth($request);
+    })->middleware('jwt.auth');
+   
     /*
     |--------------------------------------------------------------------------
     | PARENTS
@@ -286,6 +335,7 @@ Route::prefix('parent')->group(function () {
     });
 
 });
+
 
 /*
 |--------------------------------------------------------------------------
