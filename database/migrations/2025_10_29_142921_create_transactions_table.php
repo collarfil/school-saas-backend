@@ -17,6 +17,7 @@ return new class extends Migration
     $table->decimal('amount', 10, 2);
     $table->string('method')->nullable(); // paystack, bank, etc
     $table->string('status')->default('pending');
+    $table->foreignId('school_id')->constrained()->cascadeOnDelete();
     $table->timestamps();
     $table->softDeletes();
         });

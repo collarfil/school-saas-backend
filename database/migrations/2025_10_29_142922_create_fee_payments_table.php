@@ -19,6 +19,7 @@ return new class extends Migration
     $table->decimal('amount_paid', 10, 2);
     $table->date('payment_date');
     $table->string('status')->default('paid');
+    $table->foreignId('school_id')->constrained()->cascadeOnDelete();
     $table->timestamps();
     $table->softDeletes();
         });

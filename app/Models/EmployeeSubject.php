@@ -15,6 +15,7 @@ class EmployeeSubject extends Model
     protected $fillable = [
         'employee_id',
         'subject_id',
+        'school_id'
     ];
 
     public function employee()
@@ -25,5 +26,9 @@ class EmployeeSubject extends Model
     public function subject()
     {
         return $this->belongsTo(Subject::class);
+    }
+    public function school()
+    {
+        return $this->belongsTo(School::class, 'school_id');
     }
 }

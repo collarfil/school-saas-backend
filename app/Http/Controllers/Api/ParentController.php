@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Services\UserCreationService;
 use App\Http\Controllers\Controller;
 use App\Models\Parents;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 
 class ParentController extends Controller
 {
@@ -45,61 +47,103 @@ class ParentController extends Controller
         }
     }
 
-        public function store(Request $request)
-        {
-            try {
-                $validated = $request->validate([
-                    'name' => 'required|string|max:255',
-                    'phone' => 'required|string|max:20',
-                    'email' => 'nullable|email',
-                    'address' => 'nullable|string',
-                    'school_id' => 'required|exists:schools,id',
-                    // ✅ NEW
-                    'delivery_method' => 'nullable|in:email,print,both'
-                ]);
+    public function store(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'email' => 'nullable|email',
+            'phone' => 'required|string|max:20',
+            'address' => 'nullable|string',
+            'occupation' => 'nullable|string',
+            'student_ids' => 'nullable|array',
+            'student_ids.*' => 'exists:users,id',
+        ]);
 
-                $exists = Parents::where('school_id', $validated['school_id'])
-                    ->where('phone', $validated['phone'])
-                    ->exists();
-
-                if ($exists) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => 'Parent already exists with this phone'
-                    ], 422);
-                }
-
-                $parent = Parents::create($validated);
-
-                // ✅ UPDATED
-                $deliveryMethod = $validated['delivery_method'] ?? 'print';
-
-                $result = UserCreationService::createParentUser(
-                    $parent,
-                    $deliveryMethod
-                );
-
-                return response()->json([
-                    'status' => 'success',
-                    'message' => 'Parent created successfully',
-                    'data' => $parent->load(['school','students']),
-                    // ✅ ONLY RETURN WHEN NOT EMAIL-ONLY
-                    'credentials' => $deliveryMethod !== 'email' ? [
-                        'name' => $result['user']->name,
-                        'username' => $result['user']->email,
-                        'password' => $result['plain_password'],
-                    ] : null
-                ], 201);
-
-            } catch (\Exception $e) {
-                Log::error($e->getMessage());
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Failed to create parent'
-                ], 500);
-            }
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
         }
 
+        try {
+            DB::beginTransaction();
+
+            $schoolId = auth()->user()->school_id;
+            $temporaryPassword = $request->phone;
+
+            // Create user account (authentication)
+            $user = User::create([
+                'name' => $request->name,
+                'email' => $username . '@school.local',
+                'password' => Hash::make($temporaryPassword),
+                'role' => 'parent',
+                'school_id' => $schoolId,
+                'phone' => $request->phone,
+                'address' => $request->address,
+                'is_active' => true,
+                'must_change_password' => true,
+            ]);
+
+            // Create parent record (profile) - using the existing columns in your table
+            $parent = Parents::create([
+                'name' => $request->name,
+                'email' => $request->email,
+                'phone' => $request->phone,
+                'address' => $request->address,
+                'school_id' => $schoolId,
+            ]);
+
+            // Link to students using pivot table if needed
+            if ($request->has('student_ids')) {
+                foreach ($request->student_ids as $studentId) {
+                    DB::table('parent_student')->updateOrInsert([
+                        'parent_id' => $parent->id,
+                        'student_id' => $studentId,
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            // Prepare credentials for display
+            $credentials = [
+                'email' => $user->email,
+                'password' => $temporaryPassword,
+                'name' => $user->name,
+                'role' => 'parent',
+                'note' => 'Use your phone number as temporary password. You will be forced to change it on first login.'
+            ];
+
+            return response()->json([
+                'message' => 'Parent created successfully',
+                'data' => $parent,
+                'user' => $user->makeHidden(['password']),
+                'credentials' => $credentials
+            ], 201);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Parent creation failed: ' . $e->getMessage());
+            
+            return response()->json([
+                'message' => 'Parent creation failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    private function generateUsername($name, $schoolId)
+    {
+        $baseUsername = strtolower(str_replace(' ', '.', $name));
+        $username = $baseUsername;
+        $counter = 1;
+        
+        while (User::where('email', $username . '@school.local')->exists()) {
+            $username = $baseUsername . $counter;
+            $counter++;
+        }
+        
+        return $username;
+    }
 
     public function show(Request $request, $id)
     {
@@ -174,7 +218,7 @@ class ParentController extends Controller
                 ], 404);
             }
 
-            // Check for duplicate phone within the same school (excluding current parent)
+            // Check for duplicate phone within the same school
             if ($request->has('phone')) {
                 $existingParent = Parents::where('school_id', $request->school_id)
                     ->where('phone', $request->phone)
@@ -189,7 +233,7 @@ class ParentController extends Controller
                 }
             }
 
-            // Check for duplicate email within the same school (excluding current parent)
+            // Check for duplicate email within the same school
             if ($request->has('email') && !empty($request->email)) {
                 $existingParentByEmail = Parents::where('school_id', $request->school_id)
                     ->where('email', $request->email)

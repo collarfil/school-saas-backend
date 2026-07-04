@@ -15,6 +15,7 @@ class EmployeeGrade extends Model
     protected $fillable = [
         'employee_id',
         'grade_id',
+        'school_id'
     ];
 
     public function employee()
@@ -25,5 +26,10 @@ class EmployeeGrade extends Model
     public function grade()
     {
         return $this->belongsTo(Grade::class);
+    }
+
+    public function school()
+    {
+        return $this->belongsTo(School::class, 'school_id');
     }
 }

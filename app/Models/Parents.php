@@ -11,7 +11,7 @@ class Parents extends Model
     use HasFactory, SoftDeletes;
     protected $table = 'parents';
 
-    protected $fillable = ['name', 'phone', 'email', 'address', 'school_id', 'user_id'];
+    protected $fillable = ['name', 'phone', 'email', 'address', 'school_id'];
 
     public function school(){return $this->belongsTo(School::class);}
     public function students()

@@ -24,6 +24,7 @@ return new class extends Migration
             $table->string('name');
             $table->string('term');
             $table->boolean('is_current')->default(false);
+            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
             $table->timestamps();
             $table->softDeletes();
         });

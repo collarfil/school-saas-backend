@@ -13,13 +13,21 @@ class LoginController extends Controller
      */
     public function login(Request $request)
     {
-        // Validate incoming request
         $credentials = $request->validate([
-            'email' => 'required|string|email',
+            'email' => 'required|string', // Changed to accept username or email
             'password' => 'required|string',
         ]);
 
-        // Attempt login using JWT guard
+        // Check if login is by username (contains @school.local) or email
+        $loginField = filter_var($request->email, FILTER_VALIDATE_EMAIL) ? 'email' : 'email';
+        
+        // If it's a username (not a real email), search for the username pattern
+        if (!filter_var($request->email, FILTER_VALIDATE_EMAIL)) {
+            $credentials['email'] = $request->email . '@school.local';
+        } else {
+            $credentials['email'] = $request->email;
+        }
+
         if (!$token = Auth::guard('api')->attempt($credentials)) {
             return response()->json(['error' => 'Invalid credentials'], 401);
         }

@@ -11,10 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('grades', function (Blueprint $table) {
-           $table->id();
-        $table->foreignId('section_id')->constrained()->onDelete('cascade');
-    $table->string('name'); // e.g. Primary 1
+    Schema::create('grades', function (Blueprint $table) {
+    $table->id();
+    $table->foreignId('section_id')->constrained()->onDelete('cascade');
+    $table->string('name'); // e.g. Primary 1$table->foreignId('school_id')->constrained()->cascadeOnDelete();
+    $table->foreignId('school_id')->constrained()->cascadeOnDelete();
     $table->timestamps();
     $table->softDeletes();
         });

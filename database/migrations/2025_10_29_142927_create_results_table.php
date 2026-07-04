@@ -22,6 +22,7 @@ return new class extends Migration
     $table->integer('score2');
     $table->float('total');
     $table->string('grade')->nullable();
+    $table->foreignId('school_id')->constrained()->cascadeOnDelete();
     $table->timestamps();
     $table->softDeletes();
         });

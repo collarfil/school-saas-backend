@@ -11,14 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('class_messages', function (Blueprint $table) {
+       Schema::create('conversation_participants', function (Blueprint $table) {
         $table->id();
-        $table->foreignId('class_id');
-        $table->foreignId('user_id');
-        $table->text('message');
+        $table->foreignId('conversation_id')->constrained()->cascadeOnDelete();
+        $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+        $table->string('role')->nullable();
         $table->timestamps();
     });
-
     }
 
     /**
@@ -26,6 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('class_messages');
+        Schema::dropIfExists('conversation_participants');
     }
 };

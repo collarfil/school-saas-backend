@@ -11,15 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('messages', function (Blueprint $table) {
+       Schema::create('messages', function (Blueprint $table) {
         $table->id();
-        $table->foreignId('sender_id')->constrained('users');
-        $table->foreignId('receiver_id')->nullable()->constrained('users'); // null = broadcast
-        $table->text('message');
-        $table->boolean('is_read')->default(false);
+        $table->foreignId('conversation_id')->constrained()->cascadeOnDelete();
+        $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+        $table->text('body')->nullable();
         $table->timestamps();
     });
-
     }
 
     /**
@@ -27,6 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('messages');
+        Schema::dropIfExists('message');
     }
 };

@@ -17,6 +17,7 @@ return new class extends Migration
     $table->decimal('amount', 10, 2);
     $table->date('date');
     $table->text('note')->nullable();
+    $table->foreignId('school_id')->constrained()->cascadeOnDelete();
     $table->timestamps();
     $table->softDeletes();
         });

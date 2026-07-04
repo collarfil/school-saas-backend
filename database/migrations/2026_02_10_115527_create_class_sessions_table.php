@@ -11,18 +11,31 @@ return new class extends Migration
      */
     public function up(): void
     {
-       // database/migrations/xxxx_create_class_sessions_table.php
-    Schema::create('class_sessions', function (Blueprint $table) {
-    $table->id();
-    $table->foreignId('teacher_id')->constrained('users');
-    $table->string('title');
-    $table->text('description')->nullable();
-    $table->string('meeting_link'); // e.g., Jitsi/Daily/Agora
-    $table->dateTime('start_time');
-    $table->dateTime('end_time')->nullable();
-    $table->boolean('is_live')->default(false);
-    $table->timestamps();
-});
+            // database/migrations/xxxx_create_class_sessions_table.php
+            Schema::create('class_sessions', function (Blueprint $table) {
+            $table->engine = 'InnoDB';
+            $table->id();
+
+            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
+
+            $table->foreignId('teacher_id')->constrained('users');
+
+            $table->foreignId('grade_id')
+                ->constrained()
+                ->cascadeOnDelete();
+
+            $table->string('title');
+            $table->text('description')->nullable();
+
+            $table->string('meeting_link');
+
+            $table->dateTime('start_time');
+            $table->dateTime('end_time')->nullable();
+
+            $table->boolean('is_live')->default(false);
+
+            $table->timestamps();
+        });
 
 
     }

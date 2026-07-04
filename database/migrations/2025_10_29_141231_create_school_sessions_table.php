@@ -16,6 +16,7 @@ return new class extends Migration
     $table->string('name'); // 2024/2025
     $table->string('term'); // 2024/2025
     $table->boolean('is_current')->default(false);
+    $table->foreignId('school_id')->constrained()->cascadeOnDelete();
     $table->timestamps();
     $table->softDeletes();
         });

@@ -11,7 +11,7 @@ class Student extends Model
     use HasFactory, SoftDeletes;
 
     // FIX: Change 'parent_id' to 'parents_id' to match your migration
-    protected $fillable = ['name',  'grade_id', 'email', 'admission_number', 'parents_id','gender', 'is_active','school_id'];
+    protected $fillable = ['name',  'grade_id', 'email', 'admission_number', 'parents_id','gender', 'is_active','school_id','phone'];
 
     protected $casts = [
         

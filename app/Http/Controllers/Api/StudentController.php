@@ -9,6 +9,11 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
+
+
 
 class StudentController extends Controller
 {
@@ -64,65 +69,120 @@ class StudentController extends Controller
         }
     }
 
+    
+
+
         public function store(Request $request)
         {
+            $validator = Validator::make($request->all(), [
+                'name' => 'required|string|max:255',
+                'email' => 'nullable|email',
+                'grade_id' => 'nullable|exists:grades,id',
+                'parent_id' => 'nullable|exists:parents,id',
+                'phone' => 'required|string|max:20',
+                'admission_number' => 'nullable|string|unique:students',
+                'gender' => 'nullable|in:male,female,other,Male,Female,Other',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
             try {
-                $validated = $request->validate([
-                    'grade_id' => 'required|exists:grades,id',
-                    'parents_id' => 'nullable|exists:parents,id',
-                    'name' => 'required|string|max:255',
-                    'admission_number' => 'required|string',
-                    'email' => 'nullable|email',
-                    'gender' => 'nullable|in:Male,Female,Other',
-                    'school_id' => 'required|exists:schools,id',
-                    // ✅ NEW
-                    'delivery_method' => 'nullable|in:email,print,both'
+                DB::beginTransaction();
+
+                $schoolId = auth()->user()->school_id;
+                $temporaryPassword = $request->phone;
+                
+                // Generate unique username from name
+                $username = $this->generateUsername($request->name, $schoolId);
+
+                // Create user account with generated username as email
+                $user = User::create([
+                    'name' => $request->name,
+                    'email' => $username . '@school.local', // Use generated username
+                    'password' => Hash::make($temporaryPassword),
+                    'role' => 'student',
+                    'school_id' => $schoolId,
+                    'phone' => $request->phone,
+                    'is_active' => true,
+                    'must_change_password' => true,
                 ]);
 
-                $exists = Student::where('school_id', $validated['school_id'])
-                    ->where('admission_number', $validated['admission_number'])
-                    ->exists();
+                // Create student record
+                $student = Student::create([
+                    'user_id' => $user->id,
+                    'school_id' => $schoolId,
+                    'admission_number' => $request->admission_number ?? $this->generateAdmissionNumber(),
+                    'grade_id' => $request->grade_id,
+                    'parents_id' => $request->parent_id,
+                    'gender' => $request->gender,
+                    'name' => $request->name,
+                    'email' => $request->email, // Store original email (can be null or shared)
+                    'phone' => $request->phone,
+                    'is_active' => true,
+                ]);
 
-                if ($exists) {
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => 'Admission number already exists in this school'
-                    ], 422);
-                }
+                DB::commit();
 
-                $validated['is_active'] = $validated['is_active'] ?? true;
-
-                $student = Student::create($validated);
-
-                // ✅ UPDATED
-                $deliveryMethod = $validated['delivery_method'] ?? 'print';
-
-                $result = UserCreationService::createStudentUser(
-                    $student,
-                    $deliveryMethod
-                );
+                // Prepare credentials for display
+                $credentials = [
+                    'username' => $username,
+                    'email' => $user->email,
+                    'password' => $temporaryPassword,
+                    'name' => $user->name,
+                    'role' => 'student',
+                    'admission_number' => $student->admission_number,
+                    'note' => 'Use your username or email to login. Phone number is your temporary password.'
+                ];
 
                 return response()->json([
-                    'status' => 'success',
                     'message' => 'Student created successfully',
-                    'data' => $student->load(['grade','parent','school']),
-                    // ✅ ONLY RETURN WHEN NOT EMAIL-ONLY
-                    'credentials' => $deliveryMethod !== 'email' ? [
-                        'name' => $result['user']->name,
-                        'username' => $result['user']->email,
-                        'password' => $result['plain_password'],
-                    ] : null
+                    'data' => $student,
+                    'user' => $user->makeHidden(['password']),
+                    'credentials' => $credentials
                 ], 201);
 
             } catch (\Exception $e) {
-                Log::error($e->getMessage());
+                DB::rollBack();
+                Log::error('Student creation failed: ' . $e->getMessage());
+                
                 return response()->json([
-                    'status' => 'error',
-                    'message' => 'Failed to create student'
+                    'message' => 'Student creation failed: ' . $e->getMessage()
                 ], 500);
             }
         }
 
+        // Add this helper method to generate unique username
+        private function generateUsername($name, $schoolId)
+        {
+            $baseUsername = strtolower(preg_replace('/[^a-zA-Z0-9]/', '.', $name));
+            $username = $baseUsername;
+            $counter = 1;
+            
+            // Check if username already exists in users table (email column stores username@school.local)
+            while (User::where('email', $username . '@school.local')->exists()) {
+                $username = $baseUsername . $counter;
+                $counter++;
+            }
+            
+            return $username;
+        }
+
+
+
+    private function generateAdmissionNumber()
+    {
+        $year = date('Y');
+        $lastStudent = Student::whereYear('created_at', $year)->latest()->first();
+        $lastNumber = $lastStudent ? intval(substr($lastStudent->admission_number, -4)) : 0;
+        $newNumber = str_pad($lastNumber + 1, 4, '0', STR_PAD_LEFT);
+        
+        return 'ADM/' . $year . '/' . $newNumber;
+    }
 
     public function show(Request $request, $id)
     {

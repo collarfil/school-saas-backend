@@ -18,6 +18,7 @@ return new class extends Migration
             $table->foreignId('school_session_id')->constrained('school_sessions')->cascadeOnDelete();
             $table->dateTime('attendance_date');
             $table->boolean('is_present')->default(false);
+            $table->foreignId('school_id')->constrained()->cascadeOnDelete();
             $table->timestamps();
         });
     }

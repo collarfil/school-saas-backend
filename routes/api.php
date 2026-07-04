@@ -56,6 +56,7 @@ use Illuminate\Support\Facades\Broadcast;
 use App\Http\Controllers\Api\VideoController;
 use App\Events\TestBroadcast;
 
+use App\Http\Controllers\Api\PasswordResetController;
 
 Route::get('/test-broadcast', function () {
     broadcast(new TestBroadcast("Hello Reverb"));
@@ -215,12 +216,19 @@ Route::prefix('parent')->group(function () {
     */
     Route::apiResource('parents', ParentController::class);
 
-    /*
+   /*
     |--------------------------------------------------------------------------
     | ATTENDANCE
     |--------------------------------------------------------------------------
     */
+    // Custom attendance endpoints (must be BEFORE apiResource to avoid route conflicts)
+    Route::get('/attendances/available-grades', [AttendanceController::class, 'getAvailableGrades']);
+    Route::get('/attendances/students-by-grade', [AttendanceController::class, 'getStudentsByGrade']);
+    Route::post('/attendances/bulk', [AttendanceController::class, 'bulkStore']);
+
+    // Standard CRUD routes
     Route::apiResource('attendances', AttendanceController::class);
+
 
     /*
     |--------------------------------------------------------------------------
@@ -345,4 +353,41 @@ Route::prefix('parent')->group(function () {
 Route::middleware(['jwt.auth', 'super_admin'])->prefix('v1')->group(function () {
     Route::get('/admin/dashboard', [DashboardController::class, 'index']);
     Route::apiResource('schools', SchoolController::class);
+     Route::post('/admin/schools/{school}/unlock', [SchoolController::class, 'unlock']);
+});
+
+/*
+|--------------------------------------------------------------------------
+|   PASSWORD RESET ROUTES
+|--------------------------------------------------------------------------
+*/
+Route::prefix('v1')->group(function () {
+    Route::post('/password/forgot', [\App\Http\Controllers\Api\PasswordResetController::class, 'sendResetLink']);
+    Route::post('/password/reset', [\App\Http\Controllers\Api\PasswordResetController::class, 'resetPassword']);
+    Route::post('/password/validate-token', [\App\Http\Controllers\Api\PasswordResetController::class, 'validateToken']);
+});
+
+/*
+|--------------------------------------------------------------------------
+|    Video Session Routes
+|--------------------------------------------------------------------------
+*/
+
+Route::prefix('v1')->middleware(['jwt.auth'])->group(function () {
+    Route::get('/video-sessions', [VideoSessionController::class, 'index']);
+    Route::post('/video-sessions', [VideoSessionController::class, 'store']);
+    Route::post('/video-sessions/{id}/join', [VideoSessionController::class, 'join']);
+    Route::post('/video-sessions/{id}/leave', [VideoSessionController::class, 'leave']);
+    Route::post('/video-sessions/{id}/end', [VideoSessionController::class, 'end']);
+    Route::get('/video-sessions/my-active', [VideoSessionController::class, 'myActiveSessions']);
+    
+    // WhatsApp Message Routes
+    Route::post('/whatsapp/send', [WhatsAppController::class, 'send']);
+    Route::get('/whatsapp/messages', [WhatsAppController::class, 'index']);
+    
+    // Conversation & Messaging Routes
+    Route::get('/conversations', [ConversationController::class, 'index']);
+    Route::post('/conversations', [ConversationController::class, 'store']);
+    Route::get('/conversations/{conversationId}/messages', [MessageController::class, 'index']);
+    Route::post('/conversations/{conversationId}/messages', [MessageController::class, 'store']);
 });

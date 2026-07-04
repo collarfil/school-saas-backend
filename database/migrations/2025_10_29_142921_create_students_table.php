@@ -19,6 +19,7 @@ return new class extends Migration
     $table->string('roll_number')->nullable();
     $table->string('admission_number')->unique();
     $table->string('email')->nullable();
+    $table->foreignId('school_id')->constrained()->cascadeOnDelete();
     $table->timestamps();
     $table->softDeletes();
         });

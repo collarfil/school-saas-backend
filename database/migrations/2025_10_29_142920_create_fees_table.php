@@ -18,6 +18,7 @@ return new class extends Migration
     $table->string('term');
     $table->decimal('amount', 10, 2);
     $table->string('description')->nullable();
+    $table->foreignId('school_id')->constrained()->cascadeOnDelete();
     $table->timestamps();
     $table->softDeletes();
         });

@@ -11,12 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('conversations', function (Blueprint $table) {
-            $table->id();
-            $table->unsignedBigInteger('school_id');
-            $table->boolean('is_group')->default(false);
-            $table->string('title')->nullable(); // for grade group chat
-            $table->timestamps();
+        Schema::table('students', function (Blueprint $table) {
+            $table->string('phone')->nullable()->after('email');
         });
     }
 
@@ -25,6 +21,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('conversations');
+        Schema::table('students', function (Blueprint $table) {
+            $table->dropColumn('phone');
+        });
     }
 };
