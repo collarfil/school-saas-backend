@@ -391,3 +391,22 @@ Route::prefix('v1')->middleware(['jwt.auth'])->group(function () {
     Route::get('/conversations/{conversationId}/messages', [MessageController::class, 'index']);
     Route::post('/conversations/{conversationId}/messages', [MessageController::class, 'store']);
 });
+
+
+
+/*
+|--------------------------------------------------------------------------
+| API Routes - Module Loading
+|--------------------------------------------------------------------------
+|
+| Each module's routes are loaded from their respective Route files.
+|
+*/
+
+// Load module routes
+require_once base_path('Modules/Core/Routes/core.php');
+require_once base_path('Modules/HR/Routes/hr.php');
+require_once base_path('Modules/Academics/Routes/academics.php');
+require_once base_path('Modules/Finance/Routes/finance.php');
+require_once base_path('Modules/Communication/Routes/communication.php');
+require_once base_path('Modules/Onlinelearning/Routes/onlinelearning.php');
