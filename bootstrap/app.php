@@ -6,39 +6,35 @@ use Illuminate\Foundation\Configuration\Middleware;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
-        channels: __DIR__.'/../routes/channels.php',
-        web: __DIR__ . '/../routes/web.php',
-        api: __DIR__ . '/../routes/api.php',
-        commands: __DIR__ . '/../routes/console.php',
+        web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
+        commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-    ->withBroadcasting(
-    __DIR__.'/../routes/channels.php',
-    ['middleware' => ['api', 'auth:api']]
-)
-
     ->withMiddleware(function (Middleware $middleware) {
-
-        // API group with JWT auth applied by default
-        $middleware->group('api', [
-    \Illuminate\Http\Middleware\HandleCors::class,
-    \Illuminate\Routing\Middleware\SubstituteBindings::class,
-]);
-
         $middleware->alias([
+            'custom.auth' => \App\Http\Middleware\Authenticate::class,
             'jwt.auth' => \PHPOpenSourceSaver\JWTAuth\Http\Middleware\Authenticate::class,
             'jwt.refresh' => \PHPOpenSourceSaver\JWTAuth\Http\Middleware\RefreshToken::class,
-            'subscription' => \App\Http\Middleware\CheckSchoolSubscription::class,
-            'subscription.access' => \App\Http\Middleware\CheckSubscriptionAccess::class,
-            'subscription.active' => \App\Http\Middleware\SubscriptionActive::class,
-            'admin' => \App\Http\Middleware\AdminMiddleware::class,
             'super_admin' => \App\Http\Middleware\SuperAdminMiddleware::class,
-            'permission' => \App\Http\Middleware\CheckPermission::class,
             'role' => \App\Http\Middleware\RoleMiddleware::class,
             'teaching_staff' => \App\Http\Middleware\TeachingStaffMiddleware::class,
             'account_staff' => \App\Http\Middleware\AccountStaffMiddleware::class,
         ]);
 
+        $middleware->group('api', [
+            \Illuminate\Http\Middleware\HandleCors::class,
+            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+        ]);
+
+        $middleware->group('jwt', [
+            'jwt.auth',
+        ]);
+
+        $middleware->group('jwt.super_admin', [
+            'jwt.auth',
+            'super_admin',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

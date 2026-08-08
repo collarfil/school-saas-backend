@@ -1,8 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\SubscriptionController;
-
+use App\Modules\Core\Controllers\Api\SubscriptionController;
 
 // Paystack callback route (must be in web.php for redirects)
 Route::get('/subscriptions/payment/callback', [SubscriptionController::class, 'paymentCallback'])

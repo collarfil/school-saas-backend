@@ -2,7 +2,7 @@
 
 namespace App\Modules\Academics\Controllers\Api;
 
-use App\Modules\Academics\Controllers\Controller;
+use App\Http\Controllers\Controller;
 use App\Models\SchoolSession;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 class SchoolSessionController extends Controller
 {
     // GET: List all school sessions
-    // App\Http\Controllers\Api\SchoolSessionController.php
+    // App\Modules\Academics\Controllers\Api\SchoolSessionController.php
 public function index()
 {
     try {

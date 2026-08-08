@@ -3,7 +3,8 @@
 namespace App\Modules\Onlinelearning\Models;
 
 use Illuminate\Database\Eloquent\Model;
-
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Assignment extends Model{
     protected $fillable =[

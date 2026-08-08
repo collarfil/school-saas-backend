@@ -2,7 +2,7 @@
 
 namespace App\Modules\Academics\Controllers\Api;
 
-use App\Modules\Academics\Controllers\Controller;
+use App\Http\Controllers\Controller;
 use App\Models\Result;
 use App\Models\Student;
 use Illuminate\Http\Request;
@@ -200,7 +200,6 @@ class ResultController extends Controller
             ], 403);
         }
 
-
         // If scores are being updated, recalculate total and grade
         if ($request->has('score') || $request->has('score2')) {
             $score = $request->has('score') ? $request->score : $result->score;
@@ -229,14 +228,7 @@ class ResultController extends Controller
             'message' => 'Result updated successfully',
             'data' => $result->fresh(['student', 'grade', 'subject', 'schoolSession', 'school'])
         ]);
-        if ($result->status === 'published') {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Result already published and locked'
-        ], 403);
     }
-
-}
 
     public function publishResults(Request $request)
     {
@@ -251,7 +243,6 @@ class ResultController extends Controller
             'message' => 'Results published and locked'
         ]);
     }
-
 
     public function destroy(Request $request, $id)
     {
@@ -367,6 +358,7 @@ class ResultController extends Controller
             'data' => $result
         ]);
     }
+
     public function studentReport(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -444,5 +436,21 @@ class ResultController extends Controller
             'message' => 'Results approved successfully'
         ]);
     }
+    public function pendingGrading(Request $request)
+{
+    // TODO: Implement pending grading logic for employee dashboard
+    return response()->json([
+        'status' => 'success',
+        'data' => []
+    ]);
+}
 
+public function myGrades(Request $request)
+{
+    // TODO: Implement student self-service grades logic
+    return response()->json([
+        'status' => 'success',
+        'data' => []
+    ]);
+}
 }

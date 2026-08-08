@@ -3,11 +3,11 @@
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Broadcast;
 
-use App\Modules\Communication\Controllers\Api\MessageController;
-use App\Modules\Communication\Controllers\Api\ConversationController;
-use App\Modules\Communication\Controllers\Api\VideoController;
-use App\Modules\Communication\Controllers\Api\VideoSessionController;
-use App\Modules\Communication\Controllers\Api\WhatsAppController;
+use App\Modules\Communications\Controllers\Api\MessageController;
+use App\Modules\Communications\Controllers\Api\ConversationController;
+use App\Modules\Communications\Controllers\Api\VideoController;
+use App\Modules\Communications\Controllers\Api\VideoSessionController;
+use App\Modules\Communications\Controllers\Api\WhatsAppController;
 
 /*
 |--------------------------------------------------------------------------

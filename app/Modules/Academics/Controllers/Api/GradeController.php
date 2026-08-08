@@ -2,7 +2,7 @@
 
 namespace App\Modules\Academics\Controllers\Api;
 
-use App\Modules\Academics\Controllers\Controller;
+use App\Http\Controllers\Controller;
 use App\Models\Grade;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;

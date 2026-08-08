@@ -4,10 +4,9 @@ use Illuminate\Support\Facades\Route;
 
 use App\Modules\Onlinelearning\Controllers\Api\LiveClassController;
 use App\Modules\Onlinelearning\Controllers\Api\MeetingController;
-use App\Modules\Onlinelearning\Controllers\Api\MeetingRecordingController;
+use App\Modules\Onlinelearning\Controllers\Api\RecordingController;
 use App\Modules\Onlinelearning\Controllers\Api\MeetingParticipantController;
-use App\Modules\Onlinelearning\Controllers\Api\MeetingAttendanceController;
-use App\Modules\Onlinelearning\Controllers\Api\MeetingMessageController;
+use App\Modules\Onlinelearning\Controllers\Api\ClassAttendanceController;
 use App\Modules\Onlinelearning\Controllers\Api\LiveChatController;
 use App\Modules\Onlinelearning\Controllers\Api\WhiteboardController;
 use App\Modules\Onlinelearning\Controllers\Api\PollController;
@@ -47,8 +46,8 @@ Route::middleware(['jwt.auth'])->prefix('v1')->group(function () {
     /*
     | MEETING RECORDINGS
     */
-    Route::apiResource('meeting-recordings', MeetingRecordingController::class);
-    Route::patch('meeting-recordings/{id}/visibility', [MeetingRecordingController::class, 'updateVisibility']);
+    Route::apiResource('meeting-recordings', RecordingController::class);
+    Route::patch('meeting-recordings/{id}/visibility', [RecordingController::class, 'updateVisibility']);
 
     /*
     | MEETING PARTICIPANTS
@@ -63,17 +62,17 @@ Route::middleware(['jwt.auth'])->prefix('v1')->group(function () {
     /*
     | MEETING ATTENDANCE
     */
-    Route::apiResource('meeting-attendance', MeetingAttendanceController::class);
-    Route::post('meetings/{meetingId}/students/{studentId}/present', [MeetingAttendanceController::class, 'markPresent']);
-    Route::post('meetings/{meetingId}/students/{studentId}/absent', [MeetingAttendanceController::class, 'markAbsent']);
-    Route::get('meetings/{meetingId}/attendance-summary', [MeetingAttendanceController::class, 'getMeetingAttendanceSummary']);
+    Route::apiResource('class-attendance', ClassAttendanceController::class);
+    Route::post('meetings/{meetingId}/students/{studentId}/present', [ClassAttendanceController::class, 'markPresent']);
+    Route::post('meetings/{meetingId}/students/{studentId}/absent', [ClassAttendanceController::class, 'markAbsent']);
+    Route::get('meetings/{meetingId}/attendance-summary', [ClassAttendanceController::class, 'getMeetingAttendanceSummary']);
 
     /*
-    | MEETING MESSAGES (Legacy - keep for backward compatibility)
+    | MEETING MESSAGES (Legacy - Safely mapped to active controllers for backward compatibility)
     */
-    Route::apiResource('meeting-messages', MeetingMessageController::class);
-    Route::get('meeting-messages/{messageId}/thread', [MeetingMessageController::class, 'getThread']);
-    Route::patch('meeting-messages/{id}/teacher', [MeetingMessageController::class, 'markAsTeacher']);
+    Route::apiResource('meeting-messages', LiveChatController::class);
+    Route::get('meeting-messages/{messageId}/thread', [LiveChatController::class, 'getThread']);
+    Route::patch('meeting-messages/{id}/teacher', [LiveChatController::class, 'markAsTeacher']);
 
     /*
     | LIVE CHAT

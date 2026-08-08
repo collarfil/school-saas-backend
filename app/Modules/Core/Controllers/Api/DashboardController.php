@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Modules\Communications\Controllers\Api;
+namespace App\Modules\Core\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\PaystackTransaction;

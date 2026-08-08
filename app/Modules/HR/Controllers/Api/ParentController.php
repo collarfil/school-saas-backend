@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Modules\Students\Controllers\Api;
+namespace App\Modules\HR\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Parents;

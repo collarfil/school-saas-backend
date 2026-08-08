@@ -32,7 +32,7 @@ class SubscriptionController extends Controller
             $user = $request->user();
             $query = Subscription::with(['school', 'pricing']);
 
-            if ($user && $user->school_id) {
+            if ($user && $user->school_id && !$user->isSuperAdmin()) {
                 $query->where('school_id', $user->school_id);
             }
 
@@ -57,15 +57,15 @@ class SubscriptionController extends Controller
                 $pricing = [
                     'termly' => [
                         'id' => null,
-                        'base_price' => 20000,
-                        'per_student' => 2000,
+                        'base_price' => 20000.0,
+                        'per_student' => 2000.0,
                         'duration_days' => 120,
                         'description' => 'Per term subscription'
                     ],
                     'yearly' => [
                         'id' => null,
-                        'base_price' => 50000,
-                        'per_student' => 5000,
+                        'base_price' => 50000.0,
+                        'per_student' => 5000.0,
                         'duration_days' => 365,
                         'description' => 'Annual subscription'
                     ]
@@ -128,13 +128,13 @@ class SubscriptionController extends Controller
             }
 
             $activeSubscription = $school->activeSubscription;
-            $isExpired = !$activeSubscription || $activeSubscription->valid_until === null || $activeSubscription->valid_until->lt(now());
-            $expiresIn = $activeSubscription && $activeSubscription->valid_until ? now()->diffInDays($activeSubscription->valid_until) : 0;
+            $isExpired = !$activeSubscription || $activeSubscription->valid_until === null || Carbon::parse($activeSubscription->valid_until)->lt(now());
+            $expiresIn = $activeSubscription && $activeSubscription->valid_until ? now()->diffInDays(Carbon::parse($activeSubscription->valid_until), false) : 0;
 
             return response()->json([
                 'has_active_subscription' => !$isExpired,
                 'subscription' => $activeSubscription,
-                'expires_in' => $expiresIn,
+                'expires_in' => max(0, (int)$expiresIn),
                 'is_expired' => $isExpired,
                 'school_unlocked' => (bool)$school->is_unlocked,
                 'student_capacity' => $activeSubscription->student_capacity ?? 0,
@@ -154,7 +154,10 @@ class SubscriptionController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'pricing_id' => 'required|exists:subscription_pricings,id',
-                'school_id' => 'required|exists:schools,id'
+                'school_id' => 'required|exists:schools,id',
+                'student_capacity' => 'nullable|integer|min:1',
+                'term' => 'nullable|string',
+                'school_session' => 'nullable|string',
             ]);
 
             if ($validator->fails()) {
@@ -164,7 +167,6 @@ class SubscriptionController extends Controller
             $user = $request->user();
             $schoolId = (int)$request->school_id;
 
-            // Authorization check
             if (!$user->isSuperAdmin() && !($user->isSchoolAdmin() && $user->school_id == $schoolId)) {
                 return response()->json(['status' => 'error', 'message' => 'Unauthorized.'], 403);
             }
@@ -172,28 +174,28 @@ class SubscriptionController extends Controller
             $school = School::findOrFail($schoolId);
             $pricing = SubscriptionPricing::findOrFail($request->pricing_id);
 
-            // Prevent quick duplicate pending initializations
+            // Prevent rapid double initializations within 2 minutes
             $recentPending = Subscription::where('school_id', $school->id)
                 ->where('payment_status', 'pending')
-                ->where('created_at', '>', now()->subMinutes(10))
+                ->where('created_at', '>', now()->subMinutes(2))
                 ->first();
 
             if ($recentPending) {
                 return response()->json([
                     'status' => 'pending_exists',
-                    'message' => 'A payment was recently initialized. Please complete it or cancel the old one.',
-                    'existing_reference' => $recentPending->payment_reference
+                    'message' => 'A payment was recently initialized. Please complete it or cancel the pending payment.',
+                    'existing_reference' => $recentPending->payment_reference,
+                    'subscription_id' => $recentPending->id
                 ], 200);
             }
 
-            // Business defaults
-            $studentCapacity = $request->input('student_capacity', 100); // default can be overridden
+            $studentCapacity = (int)$request->input('student_capacity', 100);
             $amount = (float)$pricing->base_price + ($studentCapacity * (float)$pricing->per_student_price);
             $planType = $pricing->plan_type;
             $term = $planType === 'termly' ? ($request->term ?? '1st term') : null;
             $schoolSession = $request->school_session ?? (date('Y') . '/' . (date('Y') + 1));
 
-            // Initialize with Paystack
+            // Initialize Paystack
             $response = $this->paystackService->initializeSubscription(
                 $school,
                 $amount,
@@ -209,13 +211,6 @@ class SubscriptionController extends Controller
 
             $reference = $response['data']['reference'] ?? null;
 
-            // Calculate valid_from / valid_until based on pricing duration_days if present
-            $now = Carbon::now();
-            $duration = $pricing->duration_days ?? ($planType === 'termly' ? 120 : 365);
-            $validFrom = $now;
-            $validUntil = $now->copy()->addDays($duration);
-
-            // Create pending subscription record
             $subscription = Subscription::create([
                 'school_id' => $school->id,
                 'pricing_id' => $pricing->id,
@@ -227,8 +222,8 @@ class SubscriptionController extends Controller
                 'payment_reference' => $reference,
                 'payment_status' => 'pending',
                 'payment_gateway' => 'paystack',
-                'valid_from' => $validFrom,
-                'valid_until' => $validUntil,
+                'valid_from' => null,
+                'valid_until' => null,
                 'status' => 'inactive',
             ]);
 
@@ -275,7 +270,6 @@ class SubscriptionController extends Controller
                     return response('OK', 200);
                 }
 
-                // Re-verify with Paystack for security
                 $verification = $this->paystackService->verifyTransaction($reference);
 
                 if (!($verification['status'] ?? false) || ($verification['data']['status'] ?? '') !== 'success') {
@@ -317,13 +311,15 @@ class SubscriptionController extends Controller
             }
 
             if (($verification['data']['status'] ?? '') === 'success') {
-                // Idempotent handler
                 $this->handleSuccessfulPayment($verification['data'], true);
-
                 return response()->json(['status' => 'success', 'message' => 'Payment verified and subscription activated.']);
             }
 
-            return response()->json(['status' => 'pending', 'message' => 'Payment not completed yet.', 'transaction_status' => $verification['data']['status'] ?? 'unknown']);
+            return response()->json([
+                'status' => 'pending',
+                'message' => 'Payment not completed yet.',
+                'transaction_status' => $verification['data']['status'] ?? 'unknown'
+            ]);
         } catch (\Throwable $e) {
             Log::error('Manual payment verification error: ' . $e->getMessage(), ['reference' => $reference]);
             return response()->json(['status' => 'error', 'message' => 'Verification failed due to service error.'], 500);
@@ -331,7 +327,7 @@ class SubscriptionController extends Controller
     }
 
     /**
-     * Cancel a pending payment to allow a new initialization.
+     * Cancel a pending payment.
      */
     public function cancelPendingPayment(Request $request)
     {
@@ -354,11 +350,6 @@ class SubscriptionController extends Controller
                 return response()->json(['status' => 'error', 'message' => 'Subscription is not currently pending.'], 400);
             }
 
-            // Only allow cancellation of older pending payments (30 minutes)
-            if ($subscription->created_at->diffInMinutes(now()) < 30) {
-                return response()->json(['status' => 'error', 'message' => 'Cannot cancel a recent pending payment. Please wait or try verification.'], 400);
-            }
-
             $subscription->update([
                 'payment_status' => 'cancelled',
                 'status' => 'inactive',
@@ -366,7 +357,7 @@ class SubscriptionController extends Controller
                 'valid_until' => null
             ]);
 
-            Log::warning('⚠️ Pending subscription manually cancelled.', ['subscription_id' => $subscriptionId, 'user_id' => $user->id ?? null]);
+            Log::info('⚠️ Pending subscription manually cancelled.', ['subscription_id' => $subscriptionId, 'user_id' => $user->id ?? null]);
 
             return response()->json(['status' => 'success', 'message' => 'Pending payment successfully cancelled.']);
         } catch (\Throwable $e) {
@@ -390,7 +381,6 @@ class SubscriptionController extends Controller
             $amountInNaira = isset($transactionData['amount']) ? ($transactionData['amount'] / 100) : 0;
 
             DB::transaction(function () use ($reference, $amountInNaira, $transactionData) {
-                // Prevent duplicate processing
                 $existingTransaction = PaystackTransaction::where('reference', $reference)->where('status', 'success')->first();
                 if ($existingTransaction) {
                     Log::warning('Successful payment already processed.', ['reference' => $reference]);
@@ -404,19 +394,21 @@ class SubscriptionController extends Controller
                 }
 
                 $pricing = SubscriptionPricing::find($subscription->pricing_id);
+                $durationDays = $pricing->duration_days ?? ($subscription->plan_type === 'termly' ? 120 : 365);
 
-                // Update subscription
+                $now = now();
+                $validUntil = $now->copy()->addDays($durationDays);
+
                 $subscription->update([
                     'payment_status' => 'paid',
-                    'payment_date' => now(),
+                    'payment_date' => $now,
                     'status' => 'active',
                     'amount' => $amountInNaira ?: $subscription->amount,
-                    'valid_from' => $subscription->valid_from ?? now(),
-                    'valid_until' => ($pricing && $pricing->duration_days) ? now()->addDays($pricing->duration_days) : ($subscription->valid_until ?? now()->addDays(120)),
+                    'valid_from' => $now,
+                    'valid_until' => $validUntil,
                     'payment_response' => $transactionData
                 ]);
 
-                // Activate school (if method exists) or flip flag
                 $school = $subscription->school;
                 if ($school) {
                     if (method_exists($school, 'unlock')) {
@@ -427,13 +419,12 @@ class SubscriptionController extends Controller
                     }
                 }
 
-                // Expire other active subscriptions
+                // Deactivate previously active subscriptions
                 Subscription::where('school_id', $subscription->school_id)
                     ->where('id', '!=', $subscription->id)
                     ->where('status', 'active')
                     ->update(['status' => 'expired']);
 
-                // Create or update PaystackTransaction record
                 PaystackTransaction::updateOrCreate(
                     ['reference' => $reference],
                     [
@@ -515,7 +506,6 @@ class SubscriptionController extends Controller
                 return redirect($this->getFrontendUrl() . '/subscription/failed');
             }
 
-            // Quick verification (webhook is authoritative)
             $verification = $this->paystackService->verifyTransaction($reference);
 
             if (!($verification['status'] ?? false)) {

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Modules\Finance\Controllers\Api;
 
 use Illuminate\Http\Request;
 use App\Models\Income;
