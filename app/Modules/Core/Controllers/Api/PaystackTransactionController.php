@@ -3,7 +3,7 @@
 namespace App\Modules\Core\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\PaystackTransaction;
+use App\Modules\Core\Models\PaystackTransaction;
 use Illuminate\Http\Request;
 
 class PaystackTransactionController extends Controller

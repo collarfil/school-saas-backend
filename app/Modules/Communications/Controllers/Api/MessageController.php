@@ -3,8 +3,8 @@
 namespace App\Modules\Communications\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\ConversationParticipant;
-use App\Models\Message;
+use App\Modules\Communications\Models\ConversationParticipant;
+use App\Modules\Communications\Models\Message;
 use Illuminate\Http\Request;
 use App\Events\MessageSent;
 use Illuminate\Support\Facades\Log;

@@ -3,7 +3,7 @@
 namespace App\Modules\HR\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\EmployeeSubject;
+use App\Modules\HR\Models\EmployeeSubject;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -91,6 +91,69 @@ class EmployeeSubjectController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to create mapping: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function update(Request $request, $id)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'employee_id' => 'required|exists:employees,id',
+                'subject_id' => 'required|exists:subjects,id',
+                'school_id' => 'required|exists:schools,id'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $mapping = EmployeeSubject::where('id', $id)
+                ->where('school_id', $request->school_id)
+                ->first();
+
+            if (!$mapping) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Mapping not found'
+                ], 404);
+            }
+
+            // Check if updated employee-subject pair already exists on another row
+            $exists = EmployeeSubject::where('employee_id', $request->employee_id)
+                ->where('subject_id', $request->subject_id)
+                ->where('school_id', $request->school_id)
+                ->where('id', '!=', $id)
+                ->exists();
+
+            if ($exists) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'This employee is already assigned to this subject'
+                ], 422);
+            }
+
+            $mapping->update([
+                'employee_id' => $request->employee_id,
+                'subject_id' => $request->subject_id,
+                'school_id' => $request->school_id
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Employee-Subject mapping updated successfully',
+                'data' => $mapping->load(['employee', 'subject'])
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('EmployeeSubject update error: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to update mapping: ' . $e->getMessage()
             ], 500);
         }
     }

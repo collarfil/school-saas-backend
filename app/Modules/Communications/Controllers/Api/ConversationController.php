@@ -3,8 +3,8 @@
 namespace App\Modules\Communications\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Conversation;
-use App\Models\ConversationParticipant;
+use App\Modules\Communications\Models\Conversation;
+use App\Modules\Communications\Models\ConversationParticipant;
 use Illuminate\Http\Request;
 
 class ConversationController extends Controller

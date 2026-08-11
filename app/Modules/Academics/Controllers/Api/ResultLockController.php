@@ -3,9 +3,9 @@
 namespace App\Modules\Academics\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Result;
-use App\Models\Grade;
-use App\Models\SchoolSession;
+use App\Modules\Academics\Models\Result;
+use App\Modules\Academics\Models\Grade;
+use App\Modules\Academics\Models\SchoolSession;
 use Illuminate\Http\Request;
 
 class ResultLockController extends Controller

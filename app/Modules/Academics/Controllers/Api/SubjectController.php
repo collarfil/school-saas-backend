@@ -3,7 +3,7 @@
 namespace App\Modules\Academics\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Subject;
+use App\Modules\Academics\Models\Subject;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;

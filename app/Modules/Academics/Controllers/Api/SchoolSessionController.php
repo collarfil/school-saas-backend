@@ -3,7 +3,7 @@
 namespace App\Modules\Academics\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\SchoolSession;
+use App\Modules\Academics\Models\SchoolSession;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;

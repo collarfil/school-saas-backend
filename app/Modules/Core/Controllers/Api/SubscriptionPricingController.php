@@ -3,7 +3,7 @@
 namespace App\Modules\Core\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\SubscriptionPricing;
+use App\Modules\Core\Models\SubscriptionPricing;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 

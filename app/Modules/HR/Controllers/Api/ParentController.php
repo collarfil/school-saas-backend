@@ -3,8 +3,8 @@
 namespace App\Modules\HR\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Parents;
-use App\Models\User;
+use App\Modules\HR\Models\Parents;
+use App\Modules\Core\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -72,10 +72,14 @@ class ParentController extends Controller
             $schoolId = auth()->user()->school_id;
             $temporaryPassword = $request->phone;
 
+            // Generate username and user email
+            $username = $this->generateUsername($request->name, $schoolId);
+            $userEmail = !empty($request->email) ? $request->email : ($username . '@school.local');
+
             // Create user account (authentication)
             $user = User::create([
                 'name' => $request->name,
-                'email' => $username . '@school.local',
+                'email' => $userEmail,
                 'password' => Hash::make($temporaryPassword),
                 'role' => 'parent',
                 'school_id' => $schoolId,
@@ -85,8 +89,9 @@ class ParentController extends Controller
                 'must_change_password' => true,
             ]);
 
-            // Create parent record (profile) - using the existing columns in your table
+            // Create parent record (profile)
             $parent = Parents::create([
+                'user_id' => $user->id,
                 'name' => $request->name,
                 'email' => $request->email,
                 'phone' => $request->phone,
@@ -131,9 +136,10 @@ class ParentController extends Controller
             ], 500);
         }
     }
+
     private function generateUsername($name, $schoolId)
     {
-        $baseUsername = strtolower(str_replace(' ', '.', $name));
+        $baseUsername = strtolower(str_replace(' ', '.', trim($name)));
         $username = $baseUsername;
         $counter = 1;
         

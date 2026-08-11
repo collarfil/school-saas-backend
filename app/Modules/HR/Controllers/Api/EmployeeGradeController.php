@@ -3,7 +3,7 @@
 namespace App\Modules\HR\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\EmployeeGrade;
+use App\Modules\HR\Models\EmployeeGrade;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -91,6 +91,70 @@ class EmployeeGradeController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to create mapping: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function update(Request $request, $id)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'employee_id' => 'required|exists:employees,id',
+                'grade_id' => 'required|exists:grades,id',
+                'school_id' => 'required|exists:schools,id'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $mapping = EmployeeGrade::where('id', $id)
+                ->where('school_id', $request->school_id)
+                ->first();
+
+            if (!$mapping) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Mapping not found'
+                ], 404);
+            }
+
+            // Optional check: Prevent updating to a pair that already exists on another row
+            $exists = EmployeeGrade::where('employee_id', $request->employee_id)
+                ->where('grade_id', $request->grade_id)
+                ->where('school_id', $request->school_id)
+                ->where('id', '!=', $id)
+                ->exists();
+
+            if ($exists) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'This employee is already assigned to this grade'
+                ], 422);
+            }
+
+            // Perform actual update
+            $mapping->update([
+                'employee_id' => $request->employee_id,
+                'grade_id' => $request->grade_id,
+                'school_id' => $request->school_id
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Employee-Grade mapping updated successfully',
+                'data' => $mapping->load(['employee', 'grade'])
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('EmployeeGrade update error: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to update mapping: ' . $e->getMessage()
             ], 500);
         }
     }

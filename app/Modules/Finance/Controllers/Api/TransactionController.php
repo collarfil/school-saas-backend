@@ -3,8 +3,8 @@
 namespace App\Modules\Finance\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Transaction;
-use App\Models\FeePayment;
+use App\Modules\Finance\Models\Transaction;
+use App\Modules\Finance\Models\FeePayment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;

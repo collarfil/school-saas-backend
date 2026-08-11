@@ -5,9 +5,15 @@ namespace App\Modules\Academics\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Modules\HR\Models\Student;
+use App\Modules\Core\Models\School;
 
 class Attendance extends Model
 {
+    use HasFactory, SoftDeletes;
+
+    protected $table = 'attendances';
+
     protected $fillable = [
         'grade_id',
         'student_id',
@@ -18,14 +24,16 @@ class Attendance extends Model
     ];
 
     protected $casts = [
-        'attendance_date' => 'datetime',
-        'is_present' => 'boolean',
+        'attendance_date' => 'date:Y-m-d',
+        'is_present'      => 'boolean',
     ];
 
     // --- Relationships ---
-    public function school(){
+    public function school()
+    {
         return $this->belongsTo(School::class);
     }
+
     public function grade()
     {
         return $this->belongsTo(Grade::class);

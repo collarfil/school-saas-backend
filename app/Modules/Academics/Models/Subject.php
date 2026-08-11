@@ -5,6 +5,9 @@ namespace App\Modules\Academics\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Modules\Core\Models\School;
+use App\Modules\Academics\Models\Grade;
+
 
 class Subject extends Model
 {

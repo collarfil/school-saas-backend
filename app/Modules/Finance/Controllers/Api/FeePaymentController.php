@@ -3,9 +3,9 @@
 namespace App\Modules\Finance\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\FeePayment;
-use App\Models\Fee;
-use App\Models\Transaction;
+use App\Modules\Finance\Models\FeePayment;
+use App\Modules\Finance\Models\Fee;
+use App\Modules\Finance\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;

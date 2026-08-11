@@ -5,6 +5,9 @@ namespace App\Modules\HR\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Modules\Academics\Models\Grade;
+use App\Modules\HR\Models\Employee;
+use App\Modules\Core\Models\School;
 
 class EmployeeGrade extends Model
 {

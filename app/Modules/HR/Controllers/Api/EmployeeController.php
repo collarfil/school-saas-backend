@@ -3,10 +3,12 @@
 namespace App\Modules\HR\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Employee;
+use App\Modules\HR\Models\Employee;
+use App\Modules\HR\Models\EmployeeSubject;
+use App\Modules\HR\Models\EmployeeGrade;
+use App\Modules\Core\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
-use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;

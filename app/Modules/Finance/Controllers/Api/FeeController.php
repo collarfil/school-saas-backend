@@ -3,7 +3,7 @@
 namespace App\Modules\Finance\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Fee;
+use App\Modules\Finance\Models\Fee;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 

@@ -3,9 +3,9 @@
 namespace App\Modules\Communications\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\VideoSession;
-use App\Models\VideoParticipant;
-use App\Models\Grade;
+use App\Modules\Communications\Models\VideoSession;
+use App\Modules\Communications\Models\VideoParticipant;
+use App\Modules\Communications\Models\Grade;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;

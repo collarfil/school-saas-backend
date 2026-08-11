@@ -5,6 +5,10 @@ namespace App\Modules\HR\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Modules\HR\Models\Student;
+use App\Modules\Core\Models\School;
+use App\Modules\Core\Models\User;
+
 
 class Parents extends Model
 {

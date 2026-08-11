@@ -3,9 +3,10 @@
 namespace App\Modules\Core\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\PaystackTransaction;
-use App\Models\Subscription;
-use App\Models\School;
+use App\Modules\Core\Models\PaystackTransaction;
+use App\Modules\Core\Models\Subscription;
+use App\Modules\Core\Models\School;
+use App\Modules\HR\Models\Student;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 

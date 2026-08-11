@@ -3,10 +3,10 @@
 namespace App\Modules\Core\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Subscription;
-use App\Models\School;
-use App\Models\SubscriptionPricing;
-use App\Models\PaystackTransaction;
+use App\Modules\Core\Models\Subscription;
+use App\Modules\Core\Models\School;
+use App\Modules\Core\Models\SubscriptionPricing;
+use App\Modules\Core\Models\PaystackTransaction;
 use App\Services\PaystackService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;

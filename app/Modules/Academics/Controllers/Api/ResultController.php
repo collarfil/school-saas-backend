@@ -3,8 +3,8 @@
 namespace App\Modules\Academics\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Result;
-use App\Models\Student;
+use App\Modules\Academics\Models\Result;
+use App\Modules\HR\Models\Student; // ✅ Fixed namespace
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -192,7 +192,6 @@ class ResultController extends Controller
             ], 404);
         }
 
-        // 🔐 BLOCK IF PUBLISHED
         if ($result->status === 'published') {
             return response()->json([
                 'status' => 'error',
@@ -200,7 +199,6 @@ class ResultController extends Controller
             ], 403);
         }
 
-        // If scores are being updated, recalculate total and grade
         if ($request->has('score') || $request->has('score2')) {
             $score = $request->has('score') ? $request->score : $result->score;
             $score2 = $request->has('score2') ? $request->score2 : $result->score2;
@@ -212,7 +210,6 @@ class ResultController extends Controller
             $result->grade = $this->calculateGrade($total);
         }
 
-        // Update other fields
         if ($request->has('is_locked')) {
             $result->is_locked = $request->is_locked;
         }
@@ -271,7 +268,6 @@ class ResultController extends Controller
             ], 404);
         }
 
-        // Check if result is locked
         if ($result->is_locked) {
             return response()->json([
                 'status' => 'error',
@@ -390,7 +386,6 @@ class ResultController extends Controller
 
         $studentTotal = $results->sum('total');
 
-        // 🔥 Calculate class ranking
         $classTotals = Result::where([
             'school_id' => $request->school_id,
             'school_session_id' => $request->school_session_id,
@@ -436,21 +431,20 @@ class ResultController extends Controller
             'message' => 'Results approved successfully'
         ]);
     }
-    public function pendingGrading(Request $request)
-{
-    // TODO: Implement pending grading logic for employee dashboard
-    return response()->json([
-        'status' => 'success',
-        'data' => []
-    ]);
-}
 
-public function myGrades(Request $request)
-{
-    // TODO: Implement student self-service grades logic
-    return response()->json([
-        'status' => 'success',
-        'data' => []
-    ]);
-}
+    public function pendingGrading(Request $request)
+    {
+        return response()->json([
+            'status' => 'success',
+            'data' => []
+        ]);
+    }
+
+    public function myGrades(Request $request)
+    {
+        return response()->json([
+            'status' => 'success',
+            'data' => []
+        ]);
+    }
 }

@@ -3,7 +3,7 @@
 namespace App\Modules\Communications\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\WhatsAppMessage;
+use App\Modules\Communications\Models\WhatsAppMessage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
