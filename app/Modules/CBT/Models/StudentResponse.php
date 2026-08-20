@@ -5,18 +5,18 @@ namespace App\Modules\Cbt\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Option extends Model
+class StudentResponse extends Model
 {
     use HasFactory;
 
-    protected $table = 'options';
+    protected $table = 'student_responses';
 
     protected $fillable = [
+        'exam_session_id',
         'question_id',
-        'option_text',
-        'option_image',
+        'option_id',
+        'text_answer',
         'is_correct',
     ];
 
@@ -24,13 +24,18 @@ class Option extends Model
         'is_correct' => 'boolean',
     ];
 
+    public function examSession(): BelongsTo
+    {
+        return $this->belongsTo(ExamSession::class);
+    }
+
     public function question(): BelongsTo
     {
         return $this->belongsTo(Question::class);
     }
 
-    public function studentResponses(): HasMany
+    public function option(): BelongsTo
     {
-        return $this->hasMany(StudentResponse::class);
+        return $this->belongsTo(Option::class);
     }
 }
