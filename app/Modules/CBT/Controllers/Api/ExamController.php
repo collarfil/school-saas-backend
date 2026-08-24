@@ -4,6 +4,7 @@ namespace App\Modules\Cbt\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Cbt\Models\Exam;
+use App\Modules\CBT\Models\ExamType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
@@ -49,20 +50,28 @@ class ExamController extends Controller
     }
 }
 
-    public function store(Request $request)
+public function store(Request $request)
 {
     $validator = Validator::make($request->all(), [
         'school_id' => 'required|exists:schools,id',
-        'school_session_id' => 'required|exists:school_sessions,id', // Added
+        'school_session_id' => 'required|exists:school_sessions,id',
         'exam_type_id' => 'required|exists:exam_types,id',
         'subject_id' => 'required|exists:subjects,id',
         'employee_id' => 'required|exists:employees,id',
-        'title' => 'required|string',
+        'grade_ids' => 'required|array|min:1',
+        'grade_ids.*' => 'exists:grades,id',
+        'title' => 'required|string|max:255',
+        'instruction' => 'nullable|string',
         'available_from' => 'required|date',
         'due_date' => 'required|date|after:available_from',
         'duration_minutes' => 'required|integer|min:1',
-        'max_score' => 'required|numeric',
-        'pass_mark' => 'required|numeric',
+        'max_score' => 'required|numeric|min:0',
+        'pass_mark' => 'required|numeric|min:0',
+        'randomize_questions' => 'nullable|boolean',
+        'randomize_options' => 'nullable|boolean',
+        'show_result_immediately' => 'nullable|boolean',
+        'allow_late_submission' => 'nullable|boolean',
+        'status' => 'nullable|string|in:draft,published,closed',
     ]);
 
     if ($validator->fails()) {
@@ -74,7 +83,7 @@ class ExamController extends Controller
     }
 
     try {
-        // Confirm the selected exam type belongs to the same active session framework
+        // Confirm the selected exam type belongs to the selected academic session
         $validType = ExamType::where('id', $request->exam_type_id)
             ->where('school_session_id', $request->school_session_id)
             ->exists();
@@ -86,7 +95,18 @@ class ExamController extends Controller
             ], 422);
         }
 
-        $exam = Exam::create($request->all());
+        // Use validated data to avoid passing unmapped array keys into create()
+        $validatedData = $validator->validated();
+
+        // Create the exam instance (excluding grade_ids)
+        $examData = collect($validatedData)->except(['grade_ids'])->toArray();
+        $exam = Exam::create($examData);
+
+        // Sync target grades to the pivot table (exam_grade)
+        $exam->grades()->sync($request->grade_ids);
+
+        // Load relationships for the API response
+        $exam->load(['examType', 'subject', 'employee', 'grades']);
 
         return response()->json([
             'status' => 'success',
@@ -148,73 +168,53 @@ class ExamController extends Controller
     }
 
     public function update(Request $request, $id)
-    {
-        try {
-            $validator = Validator::make(array_merge(['id' => $id], $request->all()), [
-                'id' => 'required|exists:exams,id',
-                'school_id' => 'required|exists:schools,id',
-                'exam_type_id' => 'sometimes|exists:exam_types,id',
-                'subject_id' => 'sometimes|exists:subjects,id',
-                'employee_id' => 'sometimes|exists:employees,id',
-                'school_session_id' => 'sometimes|exists:school_sessions,id', // Added
-                'title' => 'sometimes|string|max:255',
-                'instruction' => 'nullable|string',
-                'available_from' => 'sometimes|date',
-                'due_date' => 'sometimes|date|after:available_from',
-                'duration_minutes' => 'sometimes|integer|min:1',
-                'max_score' => 'sometimes|numeric|min:0',
-                'pass_mark' => 'sometimes|numeric|min:0',
-                'randomize_questions' => 'boolean',
-                'randomize_options' => 'boolean',
-                'show_result_immediately' => 'boolean',
-                'allow_late_submission' => 'boolean',
-                'status' => 'string|in:draft,published,closed',
-                'grade_ids' => 'sometimes|array',
-                'grade_ids.*' => 'exists:grades,id'
-            ]);
+{
+    $exam = Exam::findOrFail($id);
 
-            if ($validator->fails()) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Validation failed',
-                    'errors' => $validator->errors()
-                ], 422);
-            }
+    $validator = Validator::make($request->all(), [
+        'exam_type_id' => 'sometimes|required|exists:exam_types,id',
+        'subject_id' => 'sometimes|required|exists:subjects,id',
+        'employee_id' => 'sometimes|required|exists:employees,id',
+        'grade_ids' => 'sometimes|required|array|min:1',
+        'grade_ids.*' => 'exists:grades,id',
+        'title' => 'sometimes|required|string|max:255',
+        'available_from' => 'sometimes|required|date',
+        'due_date' => 'sometimes|required|date|after:available_from',
+        'duration_minutes' => 'sometimes|required|integer|min:1',
+        'max_score' => 'sometimes|required|numeric',
+        'pass_mark' => 'sometimes|required|numeric',
+    ]);
 
-            $exam = Exam::where('school_id', $request->school_id)->find($id);
-
-            if (!$exam) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Exam structure context not found.'
-                ], 404);
-            }
-
-            DB::beginTransaction();
-
-            $exam->update($request->except('grade_ids'));
-
-            if ($request->has('grade_ids')) {
-                $exam->grades()->sync($request->grade_ids);
-            }
-
-            DB::commit();
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Exam rules updated successfully',
-                'data' => $exam->fresh(['grades'])
-            ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('ExamController update error: ' . $e->getMessage());
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to update exam configuration parameters',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+    if ($validator->fails()) {
+        return response()->json([
+            'status' => 'error',
+            'errors' => $validator->errors()
+        ], 422);
     }
+
+    try {
+        $validatedData = $validator->validated();
+
+        $examData = collect($validatedData)->except(['grade_ids'])->toArray();
+        $exam->update($examData);
+
+        if ($request->has('grade_ids')) {
+            $exam->grades()->sync($request->grade_ids);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Exam updated successfully.',
+            'data' => $exam->load(['examType', 'subject', 'employee', 'grades'])
+        ]);
+    } catch (\Exception $e) {
+        Log::error('ExamController update failure: ' . $e->getMessage());
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Failed to update exam record.'
+        ], 500);
+    }
+}
 
     public function destroy(Request $request, $id)
     {

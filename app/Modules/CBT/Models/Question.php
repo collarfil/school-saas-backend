@@ -16,6 +16,8 @@ class Question extends Model
 
     protected $fillable = [
         'exam_id',
+        'grade_id',
+        'subject_id',
         'question_text',
         'question_image',
         'type',
@@ -23,22 +25,27 @@ class Question extends Model
         'explanation',
     ];
 
-    protected $casts = [
-        'marks' => 'decimal:2',
-    ];
+    /* =======================
+       RELATIONSHIPS
+    ======================= */
 
-    public function exam(): BelongsTo
+    public function exam()
     {
         return $this->belongsTo(Exam::class);
     }
 
-    public function options(): HasMany
+    public function grade()
     {
-        return $this->hasMany(Option::class);
+        return $this->belongsTo(Grade::class, 'grade_id');
     }
 
-    public function studentResponses(): HasMany
+    public function subject()
     {
-        return $this->hasMany(StudentResponse::class);
+        return $this->belongsTo(Subject::class, 'subject_id');
+    }
+
+    public function options()
+    {
+        return $this->hasMany(Option::class);
     }
 }

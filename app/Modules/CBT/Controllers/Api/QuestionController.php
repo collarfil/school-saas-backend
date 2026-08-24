@@ -5,6 +5,8 @@ namespace App\Modules\Cbt\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Modules\Cbt\Models\Question;
 use App\Modules\Cbt\Models\Exam;
+use App\Modules\Academics\Models\Grade;
+use App\Modules\Academics\Models\Subject;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
@@ -16,7 +18,9 @@ class QuestionController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'exam_id' => 'required|exists:exams,id',
+                'exam_id' => 'nullable|exists:exams,id',
+                'grade_id' => 'nullable|exists:grades,id',
+                'subject_id' => 'nullable|exists:subjects,id',
             ]);
 
             if ($validator->fails()) {
@@ -27,9 +31,22 @@ class QuestionController extends Controller
                 ], 422);
             }
 
-            $questions = Question::where('exam_id', $request->exam_id)
-                ->with('options')
-                ->get();
+            $query = Question::with(['grade', 'subject', 'options']);
+
+            // Apply filters dynamically based on incoming query parameters
+            if ($request->filled('exam_id')) {
+                $query->where('exam_id', $request->exam_id);
+            }
+
+            if ($request->filled('grade_id')) {
+                $query->where('grade_id', $request->grade_id);
+            }
+
+            if ($request->filled('subject_id')) {
+                $query->where('subject_id', $request->subject_id);
+            }
+
+            $questions = $query->latest()->get();
 
             return response()->json([
                 'status' => 'success',
@@ -48,13 +65,15 @@ class QuestionController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'exam_id' => 'required|exists:exams,id',
+            'grade_id' => 'required|exists:grades,id',
+            'subject_id' => 'required|exists:subjects,id',
+            'exam_id' => 'nullable|exists:exams,id',
             'question_text' => 'required|string',
             'question_image' => 'nullable|string',
-            'type' => 'required|string|in:mcq,boolean,theory',
+            'type' => 'required|string|in:mcq,single,multiple,boolean,theory',
             'marks' => 'required|numeric|min:0',
             'explanation' => 'nullable|string',
-            'options' => 'required_if:type,mcq,boolean|array|min:2',
+            'options' => 'required_if:type,mcq,single,multiple,boolean|array|min:2',
             'options.*.option_text' => 'required|string',
             'options.*.option_image' => 'nullable|string',
             'options.*.is_correct' => 'required|boolean'
@@ -72,10 +91,17 @@ class QuestionController extends Controller
             DB::beginTransaction();
 
             $question = Question::create($request->only([
-                'exam_id', 'question_text', 'question_image', 'type', 'marks', 'explanation'
+                'exam_id', 
+                'grade_id', 
+                'subject_id', 
+                'question_text', 
+                'question_image', 
+                'type', 
+                'marks', 
+                'explanation'
             ]));
 
-            if (in_array($request->type, ['mcq', 'boolean'])) {
+            if (in_array($request->type, ['mcq', 'single', 'multiple', 'boolean'])) {
                 $hasCorrectOption = false;
                 foreach ($request->options as $optionData) {
                     if ($optionData['is_correct']) {
@@ -98,7 +124,7 @@ class QuestionController extends Controller
             return response()->json([
                 'status' => 'success',
                 'message' => 'Question matrix saved successfully',
-                'data' => $question->load('options')
+                'data' => $question->load(['grade', 'subject', 'options'])
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -114,7 +140,7 @@ class QuestionController extends Controller
     public function show($id)
     {
         try {
-            $question = Question::with('options')->find($id);
+            $question = Question::with(['grade', 'subject', 'options'])->find($id);
 
             if (!$question) {
                 return response()->json([
@@ -142,8 +168,12 @@ class QuestionController extends Controller
         try {
             $validator = Validator::make(array_merge(['id' => $id], $request->all()), [
                 'id' => 'required|exists:questions,id',
+                'grade_id' => 'sometimes|exists:grades,id',
+                'subject_id' => 'sometimes|exists:subjects,id',
+                'exam_id' => 'nullable|exists:exams,id',
                 'question_text' => 'sometimes|string',
                 'question_image' => 'nullable|string',
+                'type' => 'sometimes|string|in:mcq,single,multiple,boolean,theory',
                 'marks' => 'sometimes|numeric|min:0',
                 'explanation' => 'nullable|string',
             ]);
@@ -164,12 +194,21 @@ class QuestionController extends Controller
                 ], 404);
             }
 
-            $question->update($request->only(['question_text', 'question_image', 'marks', 'explanation']));
+            $question->update($request->only([
+                'grade_id',
+                'subject_id',
+                'exam_id',
+                'question_text', 
+                'question_image', 
+                'type',
+                'marks', 
+                'explanation'
+            ]));
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Core text values modified successfully.',
-                'data' => $question->load('options')
+                'message' => 'Core values modified successfully.',
+                'data' => $question->load(['grade', 'subject', 'options'])
             ]);
         } catch (\Exception $e) {
             Log::error('Question update failure: ' . $e->getMessage());

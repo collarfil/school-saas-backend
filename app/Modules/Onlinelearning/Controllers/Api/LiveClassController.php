@@ -2,6 +2,7 @@
 
 namespace App\Modules\Onlinelearning\Controllers\Api;
 
+use Illuminate\Support\Str;
 use App\Http\Controllers\Controller;
 use App\Modules\Onlinelearning\Models\LiveClass;
 use Illuminate\Http\Request;
@@ -118,76 +119,92 @@ class LiveClassController extends Controller
         }
     }
 
-    public function store(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'school_id' => 'required|exists:schools,id',
-            'grade_id' => 'required|exists:grades,id',
-            'employee_id' => 'required|exists:employees,id',
-            'subject_id' => 'required|exists:subjects,id',
-            'school_session_id' => 'required|exists:school_sessions,id',
-            'title' => 'required|string|max:255',
-            'description' => 'required|string',
-            'meeting_provider' => 'required|string|max:255',
-            'meeting_url' => 'required|string',
-            'meeting_id' => 'nullable|string|max:255',
-            'meeting_password' => 'nullable|string|max:255',
-            'start_time' => 'required|date',
-            'end_time' => 'required|date|after:start_time',
-            'status' => 'nullable|in:scheduled,ongoing,completed,cancelled',
-            'recurring' => 'nullable|boolean',
-            'recurrence_pattern' => 'nullable|string|max:255',
-            'max_participants' => 'nullable|integer|min:0'
-        ]);
+ public function store(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'school_id' => 'required|exists:schools,id',
+        'grade_id' => 'required|exists:grades,id',
+        'employee_id' => 'required|exists:employees,id',
+        'subject_id' => 'required|exists:subjects,id',
+        'school_session_id' => 'required|exists:school_sessions,id',
+        'title' => 'required|string|max:255',
+        'description' => 'required|string',
+        'meeting_provider' => 'required|string|max:255',
+        'meeting_url' => 'required|string',
+        'meeting_id' => 'nullable|string|max:255',
+        'meeting_code' => 'nullable|string|max:255',
+        'meeting_password' => 'nullable|string|max:255',
+        'start_time' => 'required|date',
+        'end_time' => 'required|date|after:start_time',
+        'schedule_date' => 'nullable|date', // <-- Added validation rule
+        'status' => 'nullable|in:scheduled,ongoing,completed,cancelled',
+        'recurring' => 'nullable|boolean',
+        'recurrence_pattern' => 'nullable|string|max:255',
+        'max_participants' => 'nullable|integer|min:0'
+    ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        try {
-            DB::beginTransaction();
-
-            $liveClass = LiveClass::create([
-                'school_id' => $request->school_id,
-                'grade_id' => $request->grade_id,
-                'employee_id' => $request->employee_id,
-                'subject_id' => $request->subject_id,
-                'school_session_id' => $request->school_session_id,
-                'title' => $request->title,
-                'description' => $request->description,
-                'meeting_provider' => $request->meeting_provider,
-                'meeting_url' => $request->meeting_url,
-                'meeting_id' => $request->meeting_id,
-                'meeting_password' => $request->meeting_password,
-                'start_time' => Carbon::parse($request->start_time),
-                'end_time' => Carbon::parse($request->end_time),
-                'status' => $request->status ?? 'scheduled',
-                'recurring' => $request->recurring ?? false,
-                'recurrence_pattern' => $request->recurrence_pattern,
-                'max_participants' => $request->max_participants ?? 0
-            ]);
-
-            DB::commit();
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Live class created successfully',
-                'data' => $liveClass->load(['grade', 'employee', 'subject', 'schoolSession'])
-            ], 201);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('LiveClass store error: ' . $e->getMessage());
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to create live class: ' . $e->getMessage()
-            ], 500);
-        }
+    if ($validator->fails()) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Validation failed',
+            'errors' => $validator->errors()
+        ], 422);
     }
+
+    try {
+        DB::beginTransaction();
+
+        $startTime = Carbon::parse($request->start_time);
+        
+        // Derive schedule_date from start_time if not provided explicitly
+        $scheduleDate = $request->schedule_date 
+            ? Carbon::parse($request->schedule_date) 
+            : $startTime->toDateString();
+
+        $meetingCode = $request->meeting_code 
+            ?? 'CLASS-' . strtoupper(Str::random(8));
+
+    $liveClass = LiveClass::create([
+    'school_id' => $request->school_id,
+    'grade_id' => $request->grade_id,
+    'employee_id' => $request->employee_id,
+    'subject_id' => $request->subject_id,
+    'school_session_id' => $request->school_session_id,
+    'title' => $request->title,
+    'description' => $request->description,
+    'meeting_provider' => $request->meeting_provider,
+    'meeting_url' => $request->meeting_url,
+    'meeting_id' => $request->meeting_id,
+    'meeting_code' => $meetingCode,
+    'meeting_password' => $request->meeting_password,
+    'schedule_date' => $scheduleDate,
+    'start_time' => $startTime,
+    'end_time' => Carbon::parse($request->end_time),
+    'status' => $request->status ?? 'scheduled',
+    'recurring' => $request->recurring ?? false,
+    'recurrence_pattern' => $request->recurrence_pattern,
+    'max_participants' => $request->max_participants ?? 0,
+    'is_recorded' => $request->is_recorded ?? false,
+    'allow_chat' => $request->allow_chat ?? true, // <-- Defaulting allow_chat
+]);
+
+        DB::commit();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Live class created successfully',
+            'data' => $liveClass->load(['grade', 'employee', 'subject', 'schoolSession'])
+        ], 201);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('LiveClass store error: ' . $e->getMessage());
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Failed to create live class: ' . $e->getMessage()
+        ], 500);
+    }
+}
 
     public function update(Request $request, $id)
     {

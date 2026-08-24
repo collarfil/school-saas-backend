@@ -46,51 +46,59 @@ class ExamTypeController extends Controller
 }
 
     public function store(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'school_id' => 'required|exists:schools,id',
-        'school_session_id' => 'required|exists:school_sessions,id', // Added
-        'name' => 'required|string',
-        'slug' => 'required|string',
-        ]);
+{
+    $validator = Validator::make($request->all(), [
+        'school_id'         => 'required|exists:schools,id',
+        'school_session_id' => 'required|exists:school_sessions,id',
+        'name'              => 'required|string',
+        'slug'              => 'required|string',
+    ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
+    if ($validator->fails()) {
+        return response()->json([
+            'status'  => 'error',
+            'message' => 'Validation failed',
+            'errors'  => $validator->errors()
+        ], 422);
+    }
 
-        try {
-           $exists = ExamType::where('school_id', $request->school_id)
+    try {
+        // Check if an exam type with this slug already exists for this school session
+        $exists = ExamType::where('school_id', $request->school_id)
             ->where('school_session_id', $request->school_session_id)
             ->where('slug', $request->slug)
             ->exists();
 
-            if ($existing) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'An exam type with this name already exists for this school.'
-                ], 422);
-            }
+        // ✅ Updated $existing -> $exists
+        if ($exists) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'An exam type with this name already exists for this school session.'
+            ], 422);
+        }
 
-           $examType = ExamType::create($request->only(['school_id', 'school_session_id', 'name', 'slug']));
+        $examType = ExamType::create($request->only([
+            'school_id', 
+            'school_session_id', 
+            'name', 
+            'slug'
+        ]));
 
         return response()->json([
-            'status' => 'success',
+            'status'  => 'success',
             'message' => 'Session-scoped exam layout generated cleanly.',
-            'data' => $examType
+            'data'    => $examType
         ], 201);
+
     } catch (\Exception $e) {
         Log::error('ExamTypeController store error: ' . $e->getMessage());
         return response()->json([
-            'status' => 'error',
+            'status'  => 'error',
             'message' => 'Failed to compile exam configuration structural map.',
-            'error' => $e->getMessage()
+            'error'   => $e->getMessage()
         ], 500);
-        }
     }
+}
 
     public function show(Request $request, $id)
     {

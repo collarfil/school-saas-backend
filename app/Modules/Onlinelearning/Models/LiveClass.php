@@ -4,7 +4,11 @@ namespace App\Modules\Onlinelearning\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
-
+use App\Modules\Core\Models\School;
+use App\Modules\HR\Models\Employee;
+use App\Modules\Academics\Models\Grade;
+use App\Modules\Academics\Models\Subject;
+use App\Modules\Academics\Models\SchoolSession;
 class LiveClass extends Model
 {
     protected $fillable =[
@@ -49,7 +53,9 @@ class LiveClass extends Model
         return $this->belongsTo(Subject::class);
     
     }
-    public function school_session(){
-        return $this->belongsTo(SchoolSession::class);
+    public function schoolSession()
+    {
+        return $this->belongsTo(SchoolSession::class, 'school_session_id'); 
+        // Note: Change 'school_session_id' if your foreign key has a different column name
     }
 }

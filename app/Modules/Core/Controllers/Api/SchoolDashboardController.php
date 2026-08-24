@@ -6,10 +6,10 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
 // Models
-use App\Modules\Core\Models\Student;
-use App\Modules\Core\Models\Employee;
-use App\Modules\Core\Models\Parents;
-use App\Modules\Core\Models\FeePayment;
+use App\Modules\HR\Models\Student;
+use App\Modules\HR\Models\Employee;
+use App\Modules\HR\Models\Parents;
+use App\Modules\Finance\Models\FeePayment;
 
 class SchoolDashboardController extends Controller
 {
