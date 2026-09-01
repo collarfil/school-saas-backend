@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Modules\Finance\Models\Fee;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use App\Modules\Academics\Models\Grade;
+use App\Modules\Academics\Models\SchoolSession;
 
 class FeeController extends Controller
 {
@@ -33,25 +35,37 @@ class FeeController extends Controller
         ]);
     }
 
-    public function store(Request $request)
-    {
-        $validated = $request->validate([
-            'grade_id' => 'required|exists:grades,id',
-            'school_session_id' => 'required|exists:school_sessions,id',
-            'term' => 'required|string',
-            'amount' => 'required|numeric|min:0',
-            'description' => 'nullable|string',
-            'school_id' => 'required|exists:schools,id'
-        ]);
+   public function store(Request $request)
+{
+    $validated = $request->validate([
+        'school_id' => 'required|integer',
+        'grade_id' => 'required|integer',
+        'school_session_id' => 'required|integer',
+        'term' => 'required|string',
+        'amount' => 'required|numeric|min:0',
+        'description' => 'nullable|string',
+    ]);
 
-        $fee = Fee::create($validated);
-        
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Fee created successfully',
-            'data' => $fee->load(['grade', 'schoolsession', 'school'])
-        ], 201);
-    }
+    // Prevents inserting if matching school, grade, session, term, and description already exists
+    $fee = Fee::firstOrCreate(
+        [
+            'school_id' => $validated['school_id'],
+            'grade_id' => $validated['grade_id'],
+            'school_session_id' => $validated['school_session_id'],
+            'term' => $validated['term'],
+            'description' => $validated['description'] ?? null,
+        ],
+        [
+            'amount' => $validated['amount'],
+        ]
+    );
+
+    return response()->json([
+        'status' => 'success',
+        'message' => 'Fee processed successfully',
+        'data' => $fee
+    ], 201);
+}
 
     public function show(Request $request, $id)
     {

@@ -2,8 +2,14 @@
 
 namespace App\Modules\Finance\Models;
 
+use App\Models\School;
+use App\Models\User;
+use App\Modules\Finance\Enums\PaymentMethod;
+use App\Modules\Finance\Enums\PaymentStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Transaction extends Model
@@ -11,24 +17,45 @@ class Transaction extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'reference', 
-        'amount', 
-        'method', // Changed from 'gateway' to 'method'
-        'status',
         'school_id',
-        'response_payload', // Keep if you need it
-        'school_id'
+        'paid_by_user_id',
+        'reference',
+        'gateway_reference',
+        'amount',
+        'gateway_fee',
+        'currency',
+        'method',
+        'status',
+        'raw_response',
+        'response_payload',
+        'paid_at',
     ];
 
-    protected $casts = [
-        'response_payload' => 'array',
-        'amount' => 'decimal:2'
-    ];
-
-    public function school(){return  $this->belongsTo(School::class);}
-    // Relationship with fee payments
-    public function feePayment()
+    protected function casts(): array
     {
-        return $this->hasOne(FeePayment::class);
+        return [
+            'amount' => 'decimal:2',
+            'gateway_fee' => 'decimal:2',
+            'raw_response' => 'array',
+            'response_payload' => 'array',
+            'paid_at' => 'datetime',
+            'status' => PaymentStatus::class,
+            'method' => PaymentMethod::class,
+        ];
+    }
+
+    public function school(): BelongsTo
+    {
+        return $this->belongsTo(School::class);
+    }
+
+    public function paidByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'paid_by_user_id');
+    }
+
+    public function feePayments(): HasMany
+    {
+        return $this->hasMany(FeePayment::class);
     }
 }

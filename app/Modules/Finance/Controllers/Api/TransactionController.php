@@ -3,15 +3,27 @@
 namespace App\Modules\Finance\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Finance\Models\Transaction;
+use App\Modules\Finance\Jobs\ProcessOnlinePaymentWebhookJob;
 use App\Modules\Finance\Models\FeePayment;
+use App\Modules\Finance\Models\Transaction;
+use App\Modules\Finance\Services\OnlinePaymentService;
+use App\Modules\Finance\Services\WebhookVerificationService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 
 class TransactionController extends Controller
 {
-    public function index(Request $request)
+    public function __construct(
+        protected OnlinePaymentService $onlinePaymentService,
+        protected WebhookVerificationService $webhookVerifier
+    ) {}
+
+    /**
+     * Display a listing of transactions.
+     */
+    public function index(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'school_id' => 'required|exists:schools,id',
@@ -68,21 +80,19 @@ class TransactionController extends Controller
         }
 
         $transactions = $query->latest()->paginate(25);
-        
+
         // Add fee breakdown for fee payment transactions
         foreach ($transactions as $transaction) {
             if ($transaction->feePayment) {
-                // Get all fee payments with this reference (transaction reference = payment_reference)
                 $feePayments = FeePayment::where('payment_reference', $transaction->reference)
                     ->with(['fee', 'student'])
                     ->get();
-                    
+
                 if ($feePayments->count() > 0) {
                     $transaction->fee_payments = $feePayments;
                     $transaction->total_fees = $feePayments->count();
                     $transaction->type = 'fee_payment';
-                    
-                    // Create fee breakdown
+
                     $feeBreakdown = $feePayments->map(function ($feePayment) {
                         return [
                             'fee_description' => $feePayment->fee ? $feePayment->fee->description : 'Fee',
@@ -90,21 +100,24 @@ class TransactionController extends Controller
                             'grade' => $feePayment->fee && $feePayment->fee->grade ? $feePayment->fee->grade->name : null
                         ];
                     });
-                    
+
                     $transaction->fee_breakdown = $feeBreakdown;
                 }
             } else {
                 $transaction->type = str_starts_with($transaction->reference, 'SUB-') ? 'subscription' : 'other';
             }
         }
-        
+
         return response()->json([
             'status' => 'success',
             'data' => $transactions
         ]);
     }
 
-    public function store(Request $request)
+    /**
+     * Manually store/log a transaction.
+     */
+    public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'reference' => 'required|string',
@@ -115,11 +128,10 @@ class TransactionController extends Controller
             'school_id' => 'required|exists:schools,id'
         ]);
 
-        // Check if reference is unique within the school
         $existingTransaction = Transaction::where('school_id', $validated['school_id'])
             ->where('reference', $validated['reference'])
             ->first();
-            
+
         if ($existingTransaction) {
             return response()->json([
                 'status' => 'error',
@@ -128,7 +140,7 @@ class TransactionController extends Controller
         }
 
         $transaction = Transaction::create($validated);
-        
+
         return response()->json([
             'status' => 'success',
             'message' => 'Transaction logged successfully',
@@ -136,7 +148,10 @@ class TransactionController extends Controller
         ], 201);
     }
 
-    public function show(Request $request, $id)
+    /**
+     * Show detailed transaction information.
+     */
+    public function show(Request $request, $id): JsonResponse
     {
         $validator = Validator::make([
             'id' => $id,
@@ -165,17 +180,15 @@ class TransactionController extends Controller
             ], 404);
         }
 
-        // Add fee breakdown if it's a fee payment transaction
         if ($transaction->feePayment) {
-            // Get all fee payments with this reference
             $feePayments = FeePayment::where('payment_reference', $transaction->reference)
                 ->with(['fee', 'student'])
                 ->get();
-                
+
             if ($feePayments->count() > 0) {
                 $transaction->fee_payments = $feePayments;
                 $transaction->total_fees = $feePayments->count();
-                
+
                 $feeBreakdown = $feePayments->map(function ($feePayment) {
                     return [
                         'fee_description' => $feePayment->fee ? $feePayment->fee->description : 'Fee',
@@ -183,7 +196,7 @@ class TransactionController extends Controller
                         'grade' => $feePayment->fee && $feePayment->fee->grade ? $feePayment->fee->grade->name : null
                     ];
                 });
-                
+
                 $transaction->fee_breakdown = $feeBreakdown;
             }
         }
@@ -194,7 +207,10 @@ class TransactionController extends Controller
         ]);
     }
 
-    public function update(Request $request, $id)
+    /**
+     * Update an existing transaction safely.
+     */
+    public function update(Request $request, $id): JsonResponse
     {
         $validator = Validator::make(array_merge(['id' => $id], $request->all()), [
             'id' => 'required|exists:transactions,id',
@@ -221,18 +237,16 @@ class TransactionController extends Controller
             ], 404);
         }
 
-        // Prevent updating certain fields
         $updatableFields = $validator->validated();
-        unset($updatableFields['reference']); // Reference should not be changed
-        unset($updatableFields['amount']); // Amount should not be changed
-        
+        unset($updatableFields['reference']);
+        unset($updatableFields['amount']);
+
         $transaction->update($updatableFields);
 
-        // If this is a fee payment transaction, update the fee payments status too
         if ($request->has('status') && $transaction->feePayment) {
             $feePaymentStatus = $request->status === 'successful' ? 'paid' : 
                                ($request->status === 'pending' ? 'pending' : 'failed');
-            
+
             FeePayment::where('payment_reference', $transaction->reference)
                 ->update(['status' => $feePaymentStatus]);
         }
@@ -244,7 +258,10 @@ class TransactionController extends Controller
         ]);
     }
 
-    public function destroy(Request $request, $id)
+    /**
+     * Delete an unlinked transaction.
+     */
+    public function destroy(Request $request, $id): JsonResponse
     {
         $validator = Validator::make([
             'id' => $id,
@@ -271,7 +288,6 @@ class TransactionController extends Controller
             ], 404);
         }
 
-        // Check if transaction is linked to fee payments
         if ($transaction->feePayment) {
             return response()->json([
                 'status' => 'error',
@@ -287,7 +303,10 @@ class TransactionController extends Controller
         ]);
     }
 
-    public function getStats(Request $request)
+    /**
+     * Get transaction statistics.
+     */
+    public function getStats(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'school_id' => 'required|exists:schools,id',
@@ -318,7 +337,6 @@ class TransactionController extends Controller
             'average_amount' => $query->clone()->where('status', 'successful')->avg('amount'),
         ];
 
-        // Get transaction type breakdown
         $feePaymentTransactions = $query->clone()->whereHas('feePayment')->count();
         $subscriptionTransactions = $query->clone()->where('reference', 'like', 'SUB-%')->count();
         $otherTransactions = $query->clone()->whereDoesntHave('feePayment')
@@ -331,7 +349,6 @@ class TransactionController extends Controller
             'other' => $otherTransactions
         ];
 
-        // Get payment method breakdown
         $methodBreakdown = Transaction::where('school_id', $request->school_id)
             ->where('status', 'successful')
             ->select('method', DB::raw('COUNT(*) as count'), DB::raw('SUM(amount) as total'))
@@ -346,8 +363,10 @@ class TransactionController extends Controller
         ]);
     }
 
-    // New method to get fee payment transactions only
-    public function getFeePaymentTransactions(Request $request)
+    /**
+     * Get fee payment transactions only.
+     */
+    public function getFeePaymentTransactions(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
             'school_id' => 'required|exists:schools,id',
@@ -380,18 +399,16 @@ class TransactionController extends Controller
 
         $transactions = $query->latest()->paginate(25);
 
-        // Add fee breakdown for each transaction
         foreach ($transactions as $transaction) {
             if ($transaction->feePayment) {
-                // Get all fee payments with this reference
                 $feePayments = FeePayment::where('payment_reference', $transaction->reference)
                     ->with(['fee', 'student'])
                     ->get();
-                    
+
                 if ($feePayments->count() > 0) {
                     $transaction->fee_payments = $feePayments;
                     $transaction->total_fees = $feePayments->count();
-                    
+
                     $feeBreakdown = $feePayments->map(function ($feePayment) {
                         return [
                             'fee_description' => $feePayment->fee ? $feePayment->fee->description : 'Fee',
@@ -399,7 +416,7 @@ class TransactionController extends Controller
                             'grade' => $feePayment->fee && $feePayment->fee->grade ? $feePayment->fee->grade->name : null
                         ];
                     });
-                    
+
                     $transaction->fee_breakdown = $feeBreakdown;
                 }
             }
@@ -409,5 +426,74 @@ class TransactionController extends Controller
             'status' => 'success',
             'data' => $transactions
         ]);
+    }
+
+    /**
+     * Initialize an online payment via checkout.
+     */
+    public function initializeOnlinePayment(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'school_id' => 'required|exists:schools,id',
+            'student_id' => 'required|exists:students,id',
+            'fee_ids' => 'required|array|min:1',
+            'fee_ids.*' => 'exists:fees,id',
+            'payment_method' => 'required|string|in:paystack,stripe,flutterwave',
+            'currency' => 'nullable|string|size:3',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $checkoutData = $this->onlinePaymentService->initialize(
+                data: $validator->validated(),
+                userId: auth()->id() ?? 1
+            );
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Online payment transaction initialized',
+                'data' => $checkoutData
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ], 400);
+        }
+    }
+
+    /**
+     * Handle incoming webhooks from payment gateways.
+     */
+    public function handleWebhook(Request $request, string $provider, int $schoolId): JsonResponse
+    {
+        try {
+            $extractedData = $this->webhookVerifier->verifyAndExtract($request, $provider, $schoolId);
+
+            ProcessOnlinePaymentWebhookJob::dispatch(
+                reference: $extractedData['reference'],
+                gatewayReference: $extractedData['gateway_reference'],
+                status: $extractedData['status'],
+                gatewayFee: $extractedData['fee'],
+                rawPayload: $extractedData['raw']
+            );
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Webhook received and queued for processing'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ], 400);
+        }
     }
 }
