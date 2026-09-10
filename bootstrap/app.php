@@ -20,11 +20,13 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => \App\Http\Middleware\RoleMiddleware::class,
             'teaching_staff' => \App\Http\Middleware\TeachingStaffMiddleware::class,
             'account_staff' => \App\Http\Middleware\AccountStaffMiddleware::class,
+            'tenant' => \App\Http\Middleware\TenantMiddleware::class, // Add this
         ]);
 
         $middleware->group('api', [
             \Illuminate\Http\Middleware\HandleCors::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            \App\Http\Middleware\TenantMiddleware::class, // Already added
         ]);
 
         $middleware->group('jwt', [

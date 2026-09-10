@@ -1,4 +1,5 @@
 <?php
+// App/Modules/Core/Routes/api.php (or your module's routes path)
 
 use Illuminate\Support\Facades\Route;
 
@@ -11,34 +12,47 @@ use App\Modules\Core\Controllers\Api\SubscriptionController;
 use App\Modules\Core\Controllers\Api\SubscriptionAdminController;
 use App\Modules\Core\Controllers\Api\SchoolDashboardController;
 use App\Modules\Core\Controllers\Api\DashboardController;
+use App\Modules\Core\Controllers\Api\AdmissionController;
+use App\Modules\Core\Controllers\Api\AdmissionListController;
 
 /*
 |--------------------------------------------------------------------------
-| PUBLIC ROUTES (NO AUTH) - Core
+| PUBLIC ROUTES (NO AUTH REQUIRED) - Core Module
 |--------------------------------------------------------------------------
 */
-Route::prefix('v1')->group(function () {
+Route::prefix('v1/public')->group(function () {
+    // Central Public School Directory / Information
+    Route::get('schools/search', [SchoolController::class, 'publicSearch']);
+    Route::get('schools/{uuid}', [SchoolController::class, 'publicShowByUuid']);
 
-    // Super Admin bootstrap
+    // Public Admission Portal Endpoints
+    Route::prefix('admissions')->group(function () {
+        Route::post('apply', [AdmissionController::class, 'publicApply']);
+        Route::post('check-status', [AdmissionController::class, 'publicCheckStatus']);
+    });
+});
+
+Route::prefix('v1')->group(function () {
+    // Super Admin Bootstrap
     Route::post('register/super-admin', [RegisterController::class, 'registerSuperAdmin']);
     Route::get('register/check-super-admin', [RegisterController::class, 'checkSuperAdmin']);
 
-    // Login
+    // Authentication
     Route::prefix('auth')->group(function () {
         Route::post('login', [LoginController::class, 'login']);
     });
 
-    // Password Reset
+    // Password Management
     Route::prefix('password')->group(function () {
         Route::post('forgot', [PasswordResetController::class, 'sendResetLink']);
         Route::post('reset', [PasswordResetController::class, 'resetPassword']);
         Route::post('validate-token', [PasswordResetController::class, 'validateToken']);
     });
 
-    // Public subscription data & Paystack Webhook / Verification
+    // Public Subscription & Webhook Processing
     Route::prefix('subscriptions')->group(function () {
         Route::get('pricing', [SubscriptionController::class, 'getPricing']);
-        Route::get('pricing-options', [SubscriptionController::class, 'getPricing']); 
+        Route::get('pricing-options', [SubscriptionController::class, 'getPricing']);
 
         Route::post('webhook', [SubscriptionController::class, 'handlePaymentWebhook']);
         Route::post('verify', [SubscriptionController::class, 'verifyPayment']);
@@ -48,13 +62,13 @@ Route::prefix('v1')->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| PROTECTED ROUTES (JWT REQUIRED) - Core
+| PROTECTED ROUTES (JWT REQUIRED) - Core Module
 |--------------------------------------------------------------------------
 */
 Route::middleware(['jwt.auth'])->prefix('v1')->group(function () {
     
     /*
-    | AUTH
+    | AUTH USER OPERATIONS
     */
     Route::prefix('auth')->group(function () {
         Route::get('me', [AuthController::class, 'me']);
@@ -81,33 +95,48 @@ Route::middleware(['jwt.auth'])->prefix('v1')->group(function () {
     | SUBSCRIPTIONS (Protected)
     */
     Route::prefix('subscriptions')->group(function () {
-        // Specific paths MUST stay above dynamic parameters ({id})
         Route::get('/', [SubscriptionController::class, 'index']);
         Route::get('status', [SubscriptionController::class, 'checkStatus']);
         Route::get('status/check', [SubscriptionController::class, 'checkStatus']);
         
-        // Registered BOTH 'initialize' and 'initialize-payment' so React never fails
         Route::post('initialize', [SubscriptionController::class, 'initializePayment']);
         Route::post('initialize-payment', [SubscriptionController::class, 'initializePayment']);
         
         Route::post('cancel', [SubscriptionController::class, 'cancelPendingPayment']);
         
-        // Wildcards placed strictly last
         Route::get('{id}', [SubscriptionController::class, 'show']);
         Route::get('{id}/transactions', [SubscriptionController::class, 'getSubscriptionTransactions']);
+    });
+
+    /*
+    | ADMISSIONS MANAGEMENT
+    */
+    // Main Applicants / Application CRUD (replaces basic route prefix)
+    Route::apiResource('admissions', AdmissionController::class);
+
+    // Admission Lists Management
+    Route::prefix('admission-lists')->group(function () {
+        Route::get('/', [AdmissionListController::class, 'index']);
+        Route::post('/', [AdmissionListController::class, 'store']);
+        Route::get('/{id}', [AdmissionListController::class, 'show']);
+        Route::put('/{id}', [AdmissionListController::class, 'update']);
+        Route::delete('/{id}', [AdmissionListController::class, 'destroy']);
+        
+        // Specialized Batch Operations
+        Route::post('/{id}/publish', [AdmissionListController::class, 'publish']);
+        Route::post('/{id}/sync-applicants', [AdmissionListController::class, 'syncApplicants']);
     });
 });
 
 /*
 |--------------------------------------------------------------------------
-| SUPER ADMIN ROUTES
+| SUPER ADMIN ROUTES - Core Module
 |--------------------------------------------------------------------------
 */
 Route::middleware(['jwt.auth', 'super_admin'])->prefix('v1')->group(function () {
     Route::get('admin/dashboard', [DashboardController::class, 'index']);
     Route::apiResource('schools', SchoolController::class);
     
-    // Super Admin Lock / Unlock
     Route::post('admin/schools/{school}/unlock', [SubscriptionAdminController::class, 'unlockSchool']);
     Route::post('admin/schools/{school}/lock', [SubscriptionAdminController::class, 'lockSchool']);
 });

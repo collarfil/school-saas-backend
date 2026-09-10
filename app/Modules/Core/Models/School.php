@@ -1,11 +1,11 @@
 <?php
-// app/Modules/Core/Models/School.php
 
 namespace App\Modules\Core\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 
 class School extends Model
@@ -13,6 +13,7 @@ class School extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
+        'uuid',
         'owner', 
         'name', 
         'email', 
@@ -32,6 +33,36 @@ class School extends Model
         'has_free_subscription' => 'boolean',
         'subscription_expires_at' => 'datetime',
     ];
+
+    /**
+     * Boot method to auto-generate UUID on model creation
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($school) {
+            if (empty($school->uuid)) {
+                $school->uuid = (string) Str::uuid();
+            }
+        });
+    }
+
+    /**
+     * Use UUID as default route key binding for public endpoints
+     */
+    public function getRouteKeyName()
+    {
+        return 'uuid';
+    }
+
+    /**
+     * Find school by public UUID
+     */
+    public static function findByUuid(string $uuid): ?self
+    {
+        return static::where('uuid', $uuid)->first();
+    }
 
     // ========== RELATIONSHIPS ==========
 
@@ -70,22 +101,16 @@ class School extends Model
 
     // ========== SUBSCRIPTION METHODS ==========
 
-    /**
-     * Check if school has active subscription
-     */
     public function hasActiveSubscription(): bool
     {
-        // Check if school has free subscription
         if ($this->has_free_subscription) {
             return true;
         }
 
-        // Check if school has valid paid subscription
         if ($this->subscription_expires_at && $this->subscription_expires_at->isFuture()) {
             return true;
         }
 
-        // Check through activeSubscription relationship
         if ($this->activeSubscription()->exists()) {
             return true;
         }
@@ -93,9 +118,6 @@ class School extends Model
         return false;
     }
 
-    /**
-     * Get subscription status
-     */
     public function getSubscriptionStatus(): string
     {
         if ($this->has_free_subscription) {
@@ -117,13 +139,10 @@ class School extends Model
         return 'inactive';
     }
 
-    /**
-     * Get remaining days of subscription
-     */
     public function getRemainingDays(): ?int
     {
         if ($this->has_free_subscription) {
-            return null; // Free forever
+            return null;
         }
 
         if ($this->subscription_expires_at) {
@@ -140,17 +159,11 @@ class School extends Model
         return null;
     }
 
-    /**
-     * Check if subscription is expired
-     */
     public function isSubscriptionExpired(): bool
     {
         return !$this->hasActiveSubscription();
     }
 
-    /**
-     * Check if school can add more students
-     */
     public function canAddMoreStudents(): bool
     {
         if (!$this->hasActiveSubscription()) {
@@ -163,17 +176,12 @@ class School extends Model
         return $currentStudents < $allowedCapacity;
     }
 
-    /**
-     * Get student capacity
-     */
     public function getStudentCapacity(): int
     {
-        // Check free subscription
         if ($this->has_free_subscription) {
-            return 1000; // Unlimited for free schools
+            return 1000;
         }
 
-        // Check paid subscription
         if ($this->currentSubscription) {
             return $this->currentSubscription->student_capacity ?? 100;
         }
@@ -186,9 +194,6 @@ class School extends Model
         return 0;
     }
 
-    /**
-     * Get remaining student capacity
-     */
     public function getRemainingStudentCapacity(): int
     {
         if (!$this->hasActiveSubscription()) {
@@ -201,9 +206,6 @@ class School extends Model
         return max(0, $capacity - $currentStudents);
     }
 
-    /**
-     * Unlock school
-     */
     public function unlock(): self
     {
         $this->update(['is_unlocked' => true]);
@@ -217,9 +219,6 @@ class School extends Model
         return $this;
     }
 
-    /**
-     * Lock school
-     */
     public function lock(): self
     {
         $this->update(['is_unlocked' => false]);
@@ -233,17 +232,11 @@ class School extends Model
         return $this;
     }
 
-    /**
-     * Check if school has any subscription
-     */
     public function hasAnySubscription(): bool
     {
         return $this->subscriptions()->exists();
     }
 
-    /**
-     * Get latest subscription
-     */
     public function latestSubscription()
     {
         return $this->hasOne(Subscription::class)->latest();
@@ -284,5 +277,12 @@ class School extends Model
     {
         return $query->where('has_free_subscription', false)
             ->whereNull('subscription_expires_at');
+    }
+    public function supportTickets()
+    {
+        return $this->hasMany(
+            SupportTicket::class,
+            'school_id'
+        );
     }
 }

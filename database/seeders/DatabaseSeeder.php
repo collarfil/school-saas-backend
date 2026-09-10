@@ -5,6 +5,9 @@ namespace Database\Seeders;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Database\Seeders\TicketCategorySeeder;
+use Database\Seeders\TicketPrioritySeeder;
+use Database\Seeders\TicketStatusSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -21,5 +24,12 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test User',
             'email' => 'test@example.com',
         ]);
+         $this->call([
+        TicketCategorySeeder::class,
+        TicketPrioritySeeder::class,
+        TicketStatusSeeder::class,
+    ]);     
     }
+   
 }
+

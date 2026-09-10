@@ -49,7 +49,6 @@ class SchoolController extends Controller
             'phone' => 'required|string|max:20',
             'address' => 'nullable|string',
             'logo' => 'nullable|file|image|max:2048',
-            // Subscription fields for Super Admin
             'has_free_subscription' => 'boolean',
             'subscription_type' => 'nullable|in:free,termly,yearly',
             'subscription_duration_days' => 'nullable|integer|min:1',
@@ -83,7 +82,7 @@ class SchoolController extends Controller
                 $subscriptionExpiresAt = now()->addDays((int)$validated['subscription_duration_days']);
             }
 
-            // Create school
+            // Create school (UUID is auto-generated inside model boot method)
             $school = School::create([
                 'owner' => $validated['owner'],
                 'name' => $validated['name'],
@@ -91,7 +90,7 @@ class SchoolController extends Controller
                 'phone' => $validated['phone'],
                 'address' => $validated['address'],
                 'logo' => $logoPath,
-                'is_unlocked' => true, // Unlock immediately
+                'is_unlocked' => true,
                 'has_free_subscription' => $hasFreeSubscription,
                 'subscription_type' => $subscriptionType,
                 'subscription_expires_at' => $subscriptionExpiresAt,
@@ -125,9 +124,10 @@ class SchoolController extends Controller
                 'password' => $temporaryPassword,
                 'schoolName' => $school->name,
                 'owner' => $school->owner,
+                'uuid' => $school->uuid,
             ];
 
-            // Send credentials email (non-blocking)
+            // Send credentials email
             try {
                 $frontendChangePasswordUrl = config('app.frontend_url') 
                     ? rtrim(config('app.frontend_url'), '/') . '/change-password'
@@ -163,16 +163,12 @@ class SchoolController extends Controller
         }
     }
 
-    /**
-     * Create subscription for a school
-     */
     private function createSubscription(School $school, array $data): ?Subscription
     {
         $hasFreeSubscription = $data['has_free_subscription'] ?? false;
         $subscriptionType = $data['subscription_type'] ?? ($hasFreeSubscription ? 'free' : 'termly');
         
         if ($hasFreeSubscription) {
-            // Create free subscription
             return Subscription::create([
                 'school_id' => $school->id,
                 'plan_type' => 'free',
@@ -185,17 +181,15 @@ class SchoolController extends Controller
                 'payment_gateway' => 'system',
                 'payment_date' => now(),
                 'valid_from' => now(),
-                'valid_until' => null, // Never expires for free
+                'valid_until' => null,
                 'status' => 'active',
             ]);
         }
 
-        // Create paid subscription
         $studentCapacity = $data['student_capacity'] ?? 100;
         $durationDays = $data['subscription_duration_days'] ?? ($subscriptionType === 'termly' ? 120 : 365);
         $validUntil = now()->addDays($durationDays);
 
-        // Get pricing
         $pricing = SubscriptionPricing::where('plan_type', $subscriptionType)
             ->where('is_active', true)
             ->first();
@@ -287,9 +281,6 @@ class SchoolController extends Controller
         return response()->json(['message' => 'School deleted successfully']);
     }
 
-    /**
-     * Get school subscription status
-     */
     public function getSubscriptionStatus($id)
     {
         $school = School::with(['activeSubscription', 'currentSubscription'])->findOrFail($id);
@@ -314,9 +305,6 @@ class SchoolController extends Controller
         ]);
     }
 
-    /**
-     * Update school subscription (Super Admin only)
-     */
     public function updateSubscription(Request $request, $id)
     {
         if (!auth()->user()->isSuperAdmin()) {
@@ -349,7 +337,6 @@ class SchoolController extends Controller
                 $subscriptionExpiresAt = now()->addDays((int)$validated['subscription_duration_days']);
             }
 
-            // Update school
             $school->update([
                 'has_free_subscription' => $hasFreeSubscription,
                 'subscription_type' => $subscriptionType,
@@ -357,7 +344,6 @@ class SchoolController extends Controller
                 'is_unlocked' => $hasFreeSubscription || ($subscriptionExpiresAt && $subscriptionExpiresAt->isFuture()),
             ]);
 
-            // Create new subscription record
             if ($hasFreeSubscription) {
                 $subscription = Subscription::create([
                     'school_id' => $school->id,
@@ -441,7 +427,6 @@ class SchoolController extends Controller
             $school = School::findOrFail($id);
             $school->unlock();
 
-            // Activate any pending subscription
             $pendingSubscription = $school->subscriptions()
                 ->where('payment_status', 'paid')
                 ->where('status', 'inactive')
@@ -527,9 +512,6 @@ class SchoolController extends Controller
         ]);
     }
 
-    /**
-     * Get all schools with subscription status (Super Admin only)
-     */
     public function getSchoolsWithStatus(Request $request)
     {
         if (!auth()->user()->isSuperAdmin()) {
@@ -548,5 +530,67 @@ class SchoolController extends Controller
         });
 
         return response()->json($schools);
+    }
+
+    // ======================== PUBLIC ADMISSION PORTAL ENDPOINTS ========================
+
+    /**
+     * Public endpoint - Search schools for central admission portal dropdown
+     */
+    public function publicSearch(Request $request)
+    {
+        try {
+            $search = $request->query('query');
+
+            $schools = School::where('is_unlocked', true)
+                ->when($search, function ($query, $search) {
+                    $query->where('name', 'like', "%{$search}%");
+                })
+                ->select('uuid', 'name', 'address', 'logo')
+                ->limit(20)
+                ->get();
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $schools
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Public school search error: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch schools'
+            ], 500);
+        }
+    }
+
+    /**
+     * Public endpoint - Get single school details by UUID for admission preview
+     */
+    public function publicShowByUuid($uuid)
+    {
+        try {
+            $school = School::where('is_unlocked', true)
+                ->where('uuid', $uuid)
+                ->select('uuid', 'name', 'email', 'phone', 'address', 'logo')
+                ->first();
+
+            if (!$school) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'School not found or inactive'
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $school
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Public school show error: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch school details'
+            ], 500);
+        }
     }
 }

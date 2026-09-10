@@ -81,6 +81,46 @@ class User extends Authenticatable implements JWTSubject
         return $this->role === $role;
     }
 
+    public function createdSupportTickets()
+    {
+        return $this->hasMany(
+            SupportTicket::class,
+            'created_by'
+        );
+    }
+
+    public function assignedSupportTickets()
+    {
+        return $this->hasMany(
+            SupportTicket::class,
+            'assigned_to'
+        );
+    }
+
+    public function ticketMessages()
+    {
+        return $this->hasMany(
+            TicketMessage::class,
+            'sender_id'
+        );
+    }
+
+    public function ticketAttachments()
+    {
+        return $this->hasMany(
+            TicketAttachment::class,
+            'uploaded_by'
+        );
+    }
+
+    public function ticketStatusChanges()
+    {
+        return $this->hasMany(
+            TicketStatusHistory::class,
+            'changed_by'
+        );
+    }
+
     public function getPermissions()
     {
         $rolePermissions = [

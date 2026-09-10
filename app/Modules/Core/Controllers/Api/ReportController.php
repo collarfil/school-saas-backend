@@ -36,4 +36,4 @@ class ReportController extends Controller
         // Placeholder: Implement later
         return response()->json(['message' => 'Employees report - coming soon']);
     }
-}
+ }

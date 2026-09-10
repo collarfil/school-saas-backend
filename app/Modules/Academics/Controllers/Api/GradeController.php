@@ -34,6 +34,19 @@ class GradeController extends Controller
         ]);
     }
 
+  public function publicIndex(Request $request)
+{
+    $schoolId = $request->query('school_id', 1);
+
+    $grades = Grade::where('school_id', $schoolId)
+        ->select('id', 'name')
+        ->orderBy('name')
+        ->get();
+
+    return response()->json(['status' => 'success', 'data' => $grades]);
+}
+
+
     public function store(Request $request)
     {
         $validated = $request->validate([

@@ -118,15 +118,16 @@ class EmployeeController extends Controller
 
             // Create user account (authentication)
             $user = User::create([
-                'name' => $request->name,
-                'email' => $request->email,
-                'password' => Hash::make($temporaryPassword),
-                'role' => 'employee',
-                'school_id' => $schoolId,
-                'phone' => $request->phone,
-                'is_active' => true,
-                'must_change_password' => true,
-            ]);
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => Hash::make($temporaryPassword),
+            'role' => 'employee',
+            'school_id' => $schoolId,
+            'phone' => $request->phone,
+            'is_active' => true,
+            'must_change_password' => true,
+            'employee_type' => $request->employee_type,
+        ]);
 
             // Create employee record (profile) - using your actual table structure
             $employee = Employee::create([

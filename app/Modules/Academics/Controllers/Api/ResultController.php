@@ -355,68 +355,122 @@ class ResultController extends Controller
         ]);
     }
 
-    public function studentReport(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'school_id' => 'required|exists:schools,id',
-            'student_id' => 'required|exists:students,id',
-            'school_session_id' => 'required|exists:school_sessions,id',
-            'term' => 'required|string'
-        ]);
+     // Inside App\Modules\Academics\Controllers\Api\ResultController.php
 
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => 'error',
-                'errors' => $validator->errors()
-            ], 422);
-        }
+public function studentReport(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'school_id'         => 'required|exists:schools,id',
+        'student_id'        => 'required|exists:students,id',
+        'school_session_id' => 'required|exists:school_sessions,id',
+        'term'              => 'required|string'
+    ]);
 
-        $student = Student::where('id', $request->student_id)
-            ->where('school_id', $request->school_id)
-            ->firstOrFail();
-
-        $results = Result::where([
-            'school_id' => $request->school_id,
-            'student_id' => $request->student_id,
-            'school_session_id' => $request->school_session_id,
-            'term' => $request->term,
-        ])
-        ->with(['subject', 'school', 'schoolSession'])
-        ->get();
-
-        $studentTotal = $results->sum('total');
-
-        $classTotals = Result::where([
-            'school_id' => $request->school_id,
-            'school_session_id' => $request->school_session_id,
-            'term' => $request->term,
-        ])
-        ->get()
-        ->groupBy('student_id')
-        ->map(fn($items) => $items->sum('total'))
-        ->sortDesc()
-        ->values();
-
-        $position = $classTotals->search($studentTotal) + 1;
-
-        $average = $results->count() > 0
-            ? round($studentTotal / $results->count(), 2)
-            : 0;
-
+    if ($validator->fails()) {
         return response()->json([
-            'status' => 'success',
-            'data' => [
-                'student' => $student,
-                'school' => $results->first()?->school,
-                'session' => $results->first()?->schoolSession,
-                'term' => $request->term,
-                'results' => $results,
-                'total' => $studentTotal,
-                'average' => $average,
-                'position' => $position
-            ]
-        ]);
+            'status' => 'error',
+            'errors' => $validator->errors()
+        ], 422);
     }
+
+    $studentId = $request->student_id;
+    $schoolId  = $request->school_id;
+    $sessionId = $request->school_session_id;
+    $term      = $request->term;
+
+    // 1. Fetch Student Details
+    $student = Student::where('id', $studentId)
+        ->where('school_id', $schoolId)
+        ->firstOrFail();
+
+    // 2. Fetch Results
+    $results = Result::where([
+        'school_id'         => $schoolId,
+        'student_id'        => $studentId,
+        'school_session_id' => $sessionId,
+        'term'              => $term,
+    ])
+    ->with(['subject', 'school', 'schoolSession'])
+    ->get();
+
+    // 3. Format Subjects Array for Template
+    $subjects = $results->map(function ($res) {
+        $caScore   = (float) ($res->score ?? 0);
+        $examScore = (float) ($res->score2 ?? 0);
+        $total     = (float) ($res->total ?? ($caScore + $examScore));
+
+        return [
+            'id'         => $res->subject_id,
+            'name'       => $res->subject?->name ?? 'Unknown Subject',
+            'ca_score'   => $caScore,
+            'exam_score' => $examScore,
+            'total'      => $total,
+            'average'    => $total,
+            'grade'      => $res->grade ?? null
+        ];
+    });
+
+    // 4. Calculate Summary Metrics
+    $studentTotal = $subjects->sum('total');
+    $average      = $subjects->count() > 0 ? round($studentTotal / $subjects->count(), 2) : 0;
+
+    // 5. Calculate Class Position
+    $classTotals = Result::where([
+        'school_id'         => $schoolId,
+        'school_session_id' => $sessionId,
+        'term'              => $term,
+    ])
+    ->get()
+    ->groupBy('student_id')
+    ->map(fn($items) => $items->sum('total'))
+    ->sortDesc()
+    ->values();
+
+    $studentRank = $classTotals->search($studentTotal);
+    $position = '-';
+    if ($studentRank !== false) {
+        $pos = $studentRank + 1;
+        $ends = ['th','st','nd','rd','th','th','th','th','th','th'];
+        $position = (($pos % 100) >= 11 && ($pos % 100) <= 13) ? $pos . 'th' : $pos . $ends[$pos % 10];
+    }
+
+    // 6. Return Payload Matched to React Template
+    return response()->json([
+        'status' => 'success',
+        'data'   => [
+            'term_name'      => is_numeric($term) ? "Term {$term}" : ucfirst($term),
+            'session_name'   => $results->first()?->schoolSession?->name ?? 'Current Session',
+            'total_students' => $classTotals->count(),
+            'subjects'       => $subjects,
+            'overall' => [
+                'total'    => $studentTotal,
+                'average'  => $average,
+                'position' => $position,
+            ],
+            'attendance' => [
+                'times_opened'  => '-',
+                'times_present' => '-',
+                'height'        => '-',
+                'weight'        => '-',
+            ],
+            'traits' => [
+                'participation'  => 'A',
+                'homework'       => 'A',
+                'projects'       => 'B',
+                'leadership'     => 'A',
+                'politeness'     => 'A',
+                'punctuality'    => 'A',
+                'interaction'    => 'A',
+                'responsibility' => 'A',
+            ],
+            'teacher_comment'      => 'A commendable performance throughout the term.',
+            'head_teacher_comment' => 'Satisfactory effort.',
+            'class_teacher'        => 'Class Teacher',
+            'head_teacher'         => 'Principal',
+            'signature_date'       => now()->format('Y-m-d'),
+        ]
+    ]);
+}
 
     public function approveResults(Request $request)
     {

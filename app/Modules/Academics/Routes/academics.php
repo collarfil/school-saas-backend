@@ -12,6 +12,25 @@ use App\Modules\Academics\Controllers\Api\AttendanceController;
 
 /*
 |--------------------------------------------------------------------------
+| PUBLIC ROUTES (NO AUTH) - Academics
+|--------------------------------------------------------------------------
+| Read-only, minimal-field endpoints for pages that run BEFORE a user
+| has an account — e.g. the public admission application form needs
+| to populate a Grade dropdown and a Session dropdown without a JWT.
+|
+| Do NOT reuse the protected apiResource controllers/routes for this —
+| those return full model data intended for authenticated admin screens.
+| These "public*" methods should return only what's safe to expose
+| (id + name), scoped by school_id.
+|--------------------------------------------------------------------------
+*/
+Route::prefix('v1/public')->group(function () {
+    Route::get('grades', [GradeController::class, 'publicIndex']);
+    Route::get('school-sessions', [SchoolSessionController::class, 'publicIndex']);
+});
+
+/*
+|--------------------------------------------------------------------------
 | PROTECTED ROUTES (JWT REQUIRED) - Academics
 |--------------------------------------------------------------------------
 */
@@ -24,7 +43,7 @@ Route::middleware(['jwt.auth'])->prefix('v1')->group(function () {
     Route::get('/attendances/available-grades', [AttendanceController::class, 'getAvailableGrades']);
     Route::get('/attendances/students-by-grade', [AttendanceController::class, 'getStudentsByGrade']);
     Route::post('/attendances/bulk', [AttendanceController::class, 'bulkStore']);
-    
+
     // Standard CRUD routes
     Route::apiResource('attendances', AttendanceController::class);
 

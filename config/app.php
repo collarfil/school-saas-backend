@@ -80,5 +80,15 @@ return [
         'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
+    /*
+    |--------------------------------------------------------------------------
+    | Autoloaded Service Providers
+    |--------------------------------------------------------------------------
+    
+    */
+    
 
+    'domain' => env(
+        'APP_DOMAIN', 'localhost:8000'
+    ),
 ];

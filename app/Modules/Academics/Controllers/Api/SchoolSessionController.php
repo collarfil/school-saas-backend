@@ -68,6 +68,18 @@ public function index()
     }
 }
 
+    public function publicIndex(Request $request)
+{
+    $schoolId = $request->query('school_id', 1);
+
+    $sessions = SchoolSession::where('school_id', $schoolId)
+        ->select('id', 'name')
+        ->orderBy('name')
+        ->get();
+
+    return response()->json(['status' => 'success', 'data' => $sessions]);
+}
+
     // POST: Create a new school session
     public function store(Request $request)
     {

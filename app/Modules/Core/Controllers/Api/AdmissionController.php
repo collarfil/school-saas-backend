@@ -5,31 +5,48 @@ namespace App\Modules\Core\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Modules\Core\Models\Admission;
 use App\Modules\Core\Models\School;
-use App\Modules\Academics\Models\Grade;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class AdmissionController extends Controller
 {
+    /**
+     * Resolves tenant school_id safely from authenticated context.
+     */
+    private function resolveSchoolId(Request $request): ?int
+    {
+        $user = auth()->user();
+        if ($user && method_exists($user, 'isSuperAdmin') && !$user->isSuperAdmin()) {
+            return $user->school_id;
+        }
+        return $request->query('school_id') ?? $request->input('school_id') ?? $user?->school_id;
+    }
+
     public function index(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'school_id' => 'required|exists:schools,id'
-        ]);
+        $schoolId = $this->resolveSchoolId($request);
 
-        if ($validator->fails()) {
+        if (!$schoolId) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
+                'message' => 'School context identifier is missing.'
             ], 422);
         }
 
-        $query = Admission::where('school_id', $request->school_id)
-            ->with(['grade', 'school']);
+        $query = Admission::where('school_id', $schoolId)
+            ->with(['grade', 'school', 'schoolSession', 'admissionList']);
 
         if ($request->filled('grade_id')) {
             $query->where('grade_id', $request->grade_id);
+        }
+
+        if ($request->filled('school_session_id')) {
+            $query->where('school_session_id', $request->school_session_id);
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
         }
 
         if ($request->filled('gender')) {
@@ -39,12 +56,15 @@ class AdmissionController extends Controller
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('phone', 'like', "%{$search}%");
+                $q->where('first_name', 'like', "%{$search}%")
+                  ->orWhere('last_name', 'like', "%{$search}%")
+                  ->orWhere('application_number', 'like', "%{$search}%")
+                  ->orWhere('phone', 'like', "%{$search}%")
+                  ->orWhere('guardian_phone', 'like', "%{$search}%");
             });
         }
 
-        $admissions = $query->paginate(50);
+        $admissions = $query->latest()->paginate(50);
 
         return response()->json([
             'status' => 'success',
@@ -54,14 +74,28 @@ class AdmissionController extends Controller
 
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $schoolId = $this->resolveSchoolId($request);
+
+        $validator = Validator::make(array_merge($request->all(), ['school_id' => $schoolId]), [
             'school_id' => 'required|exists:schools,id',
+            'school_session_id' => 'nullable|exists:school_sessions,id',
+            'term' => 'nullable|string|max:50',
             'grade_id' => 'required|exists:grades,id',
-            'prev_grade' => 'required|string|max:255',
-            'name' => 'required|string|max:255',
+            'prev_grade' => 'nullable|string|max:255',
+            'prev_school' => 'nullable|string|max:255',
+            'first_name' => 'required|string|max:255',
+            'middle_name' => 'nullable|string|max:255',
+            'last_name' => 'required|string|max:255',
             'gender' => 'required|string|in:male,female,other',
+            'date_of_birth' => 'nullable|date',
             'phone' => 'required|string|max:20',
-            'address' => 'required|string|max:500',
+            'email' => 'nullable|email|max:255',
+            'address' => 'nullable|string|max:500',
+            'guardian_name' => 'nullable|string|max:255',
+            'guardian_relationship' => 'nullable|string|max:100',
+            'guardian_phone' => 'nullable|string|max:20',
+            'guardian_email' => 'nullable|email|max:255',
+            'status' => 'nullable|string|in:pending,under_review,interview_scheduled,admitted,rejected,enrolled',
         ]);
 
         if ($validator->fails()) {
@@ -72,49 +106,50 @@ class AdmissionController extends Controller
             ], 422);
         }
 
+        $applicationNumber = 'ADM-' . date('Y') . '-' . strtoupper(Str::random(5));
+
         $admission = Admission::create([
-            'school_id' => $request->school_id,
+            'school_id' => $schoolId,
+            'school_session_id' => $request->school_session_id,
+            'term' => $request->term,
+            'application_number' => $applicationNumber,
             'grade_id' => $request->grade_id,
             'prev_grade' => $request->prev_grade,
-            'name' => $request->name,
+            'prev_school' => $request->prev_school,
+            'first_name' => $request->first_name,
+            'middle_name' => $request->middle_name,
+            'last_name' => $request->last_name,
             'gender' => $request->gender,
+            'date_of_birth' => $request->date_of_birth,
             'phone' => $request->phone,
+            'email' => $request->email,
             'address' => $request->address,
+            'guardian_name' => $request->guardian_name,
+            'guardian_relationship' => $request->guardian_relationship,
+            'guardian_phone' => $request->guardian_phone,
+            'guardian_email' => $request->guardian_email,
+            'status' => $request->status ?? Admission::STATUS_PENDING,
         ]);
 
         return response()->json([
             'status' => 'success',
             'message' => 'Admission application created successfully',
-            'data' => $admission->load(['grade', 'school'])
+            'data' => $admission->load(['grade', 'school', 'schoolSession'])
         ], 201);
     }
 
     public function show(Request $request, $id)
     {
-        $validator = Validator::make([
-            'id' => $id,
-            'school_id' => $request->school_id
-        ], [
-            'id' => 'required|exists:admission,id',
-            'school_id' => 'required|exists:schools,id'
-        ]);
+        $schoolId = $this->resolveSchoolId($request);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        $admission = Admission::where('school_id', $request->school_id)
-            ->with(['grade', 'school'])
+        $admission = Admission::where('school_id', $schoolId)
+            ->with(['grade', 'school', 'schoolSession', 'admissionList'])
             ->find($id);
 
         if (!$admission) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Admission record not found or does not belong to this school.'
+                'message' => 'Admission record not found.'
             ], 404);
         }
 
@@ -126,15 +161,41 @@ class AdmissionController extends Controller
 
     public function update(Request $request, $id)
     {
-        $validator = Validator::make(array_merge(['id' => $id], $request->all()), [
-            'id' => 'required|exists:admission,id',
-            'school_id' => 'required|exists:schools,id',
+        $schoolId = $this->resolveSchoolId($request);
+
+        $admission = Admission::where('school_id', $schoolId)->find($id);
+
+        if (!$admission) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Admission record not found.'
+            ], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'school_session_id' => 'sometimes|nullable|exists:school_sessions,id',
+            'term' => 'sometimes|nullable|string|max:50',
             'grade_id' => 'sometimes|required|exists:grades,id',
-            'prev_grade' => 'sometimes|required|string|max:255',
-            'name' => 'sometimes|required|string|max:255',
+            'prev_grade' => 'sometimes|nullable|string|max:255',
+            'prev_school' => 'sometimes|nullable|string|max:255',
+            'first_name' => 'sometimes|required|string|max:255',
+            'middle_name' => 'sometimes|nullable|string|max:255',
+            'last_name' => 'sometimes|required|string|max:255',
             'gender' => 'sometimes|required|string|in:male,female,other',
+            'date_of_birth' => 'sometimes|nullable|date',
             'phone' => 'sometimes|required|string|max:20',
-            'address' => 'sometimes|required|string|max:500',
+            'email' => 'sometimes|nullable|email|max:255',
+            'address' => 'sometimes|nullable|string|max:500',
+            'guardian_name' => 'sometimes|nullable|string|max:255',
+            'guardian_relationship' => 'sometimes|nullable|string|max:100',
+            'guardian_phone' => 'sometimes|nullable|string|max:20',
+            'guardian_email' => 'sometimes|nullable|email|max:255',
+            'status' => 'sometimes|required|string|in:pending,under_review,interview_scheduled,admitted,rejected,enrolled',
+            'interview_date' => 'sometimes|nullable|date',
+            'interview_venue' => 'sometimes|nullable|string|max:255',
+            'interview_notes' => 'sometimes|nullable|string',
+            'rejection_reason' => 'sometimes|nullable|string',
+            'admission_list_id' => 'sometimes|nullable|exists:admission_lists,id',
         ]);
 
         if ($validator->fails()) {
@@ -145,55 +206,25 @@ class AdmissionController extends Controller
             ], 422);
         }
 
-        $admission = Admission::where('school_id', $request->school_id)->find($id);
-
-        if (!$admission) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Admission record not found or does not belong to this school.'
-            ], 404);
-        }
-
-        $admission->update($request->only([
-            'grade_id',
-            'prev_grade',
-            'name',
-            'gender',
-            'phone',
-            'address',
-        ]));
+        $admission->update($validator->validated());
 
         return response()->json([
             'status' => 'success',
             'message' => 'Admission record updated successfully',
-            'data' => $admission->fresh(['grade', 'school'])
+            'data' => $admission->fresh(['grade', 'school', 'schoolSession', 'admissionList'])
         ]);
     }
 
     public function destroy(Request $request, $id)
     {
-        $validator = Validator::make([
-            'id' => $id,
-            'school_id' => $request->school_id
-        ], [
-            'id' => 'required|exists:admission,id',
-            'school_id' => 'required|exists:schools,id'
-        ]);
+        $schoolId = $this->resolveSchoolId($request);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        $admission = Admission::where('school_id', $request->school_id)->find($id);
+        $admission = Admission::where('school_id', $schoolId)->find($id);
 
         if (!$admission) {
             return response()->json([
                 'status' => 'error',
-                'message' => 'Admission record not found or does not belong to this school.'
+                'message' => 'Admission record not found.'
             ], 404);
         }
 
@@ -202,6 +233,117 @@ class AdmissionController extends Controller
         return response()->json([
             'status' => 'success',
             'message' => 'Admission record deleted successfully'
+        ]);
+    }
+
+    // ======================== PUBLIC ADMISSION PORTAL ENDPOINTS ========================
+
+    public function publicApply(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'school_uuid' => 'required|exists:schools,uuid',
+            'grade_id' => 'required|exists:grades,id',
+            'prev_grade' => 'nullable|string|max:255',
+            'prev_school' => 'nullable|string|max:255',
+            'first_name' => 'required|string|max:255',
+            'middle_name' => 'nullable|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'gender' => 'required|string|in:male,female,other',
+            'date_of_birth' => 'nullable|date',
+            'phone' => 'required|string|max:20',
+            'email' => 'nullable|email|max:255',
+            'address' => 'nullable|string|max:500',
+            'guardian_name' => 'required|string|max:255',
+            'guardian_relationship' => 'required|string|max:100',
+            'guardian_phone' => 'required|string|max:20',
+            'guardian_email' => 'nullable|email|max:255',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $school = School::where('uuid', $request->school_uuid)->firstOrFail();
+
+        $applicationNumber = 'ADM-' . date('Y') . '-' . strtoupper(Str::random(5));
+
+        $admission = Admission::create([
+            'school_id' => $school->id,
+            'application_number' => $applicationNumber,
+            'grade_id' => $request->grade_id,
+            'prev_grade' => $request->prev_grade,
+            'prev_school' => $request->prev_school,
+            'first_name' => $request->first_name,
+            'middle_name' => $request->middle_name,
+            'last_name' => $request->last_name,
+            'gender' => $request->gender,
+            'date_of_birth' => $request->date_of_birth,
+            'phone' => $request->phone,
+            'email' => $request->email,
+            'address' => $request->address,
+            'guardian_name' => $request->guardian_name,
+            'guardian_relationship' => $request->guardian_relationship,
+            'guardian_phone' => $request->guardian_phone,
+            'guardian_email' => $request->guardian_email,
+            'status' => Admission::STATUS_PENDING,
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Application submitted successfully.',
+            'data' => [
+                'application_number' => $admission->application_number,
+                'applicant_name' => "{$admission->first_name} {$admission->last_name}",
+                'school_name' => $school->name,
+                'status' => $admission->status,
+            ]
+        ], 201);
+    }
+
+    public function publicCheckStatus(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'application_number' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Application number is required',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $admission = Admission::where('application_number', $request->application_number)
+            ->with(['school:id,name,logo', 'grade:id,name'])
+            ->first();
+
+        if (!$admission) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No application found with the provided application number.'
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'application_number' => $admission->application_number,
+                'applicant_name'     => "{$admission->first_name} {$admission->last_name}",
+                'school_name'        => $admission->school->name ?? null,
+                'school_logo'        => $admission->school->logo ?? null,
+                'applied_grade'      => $admission->grade->name ?? null,
+                'status'             => $admission->status,
+                'interview_date'     => $admission->interview_date,
+                'interview_venue'    => $admission->interview_venue,
+                'interview_notes'    => $admission->interview_notes,
+                'rejection_reason'   => $admission->status === Admission::STATUS_REJECTED ? $admission->rejection_reason : null,
+                'applied_at'         => $admission->created_at->toIso8601String(),
+            ]
         ]);
     }
 }
