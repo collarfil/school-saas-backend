@@ -1,8 +1,11 @@
 <?php
 
+use App\Http\Middleware\EnsureSchoolTenant;
+use App\Http\Middleware\EnsureTicketRole;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use App\Exceptions\InvalidTicketStatusTransitionException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -21,7 +24,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'teaching_staff' => \App\Http\Middleware\TeachingStaffMiddleware::class,
             'account_staff' => \App\Http\Middleware\AccountStaffMiddleware::class,
             'tenant' => \App\Http\Middleware\TenantMiddleware::class, // Add this
+             'ticket.role' => EnsureTicketRole::class,
+            'school.tenant' => EnsureSchoolTenant::class,
         ]);
+
+    
 
         $middleware->group('api', [
             \Illuminate\Http\Middleware\HandleCors::class,
@@ -38,7 +45,18 @@ return Application::configure(basePath: dirname(__DIR__))
             'super_admin',
         ]);
     })
-    ->withExceptions(function (Exceptions $exceptions) {
-        //
-    })
+   ->withExceptions(function (Exceptions $exceptions) {
+
+    $exceptions->render(
+        function (
+            InvalidTicketStatusTransitionException $exception,
+            $request
+        ) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+    );
+
+})
     ->create();

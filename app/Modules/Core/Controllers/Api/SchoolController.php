@@ -571,7 +571,7 @@ class SchoolController extends Controller
         try {
             $school = School::where('is_unlocked', true)
                 ->where('uuid', $uuid)
-                ->select('uuid', 'name', 'email', 'phone', 'address', 'logo')
+                ->select('id','uuid', 'name', 'email', 'phone', 'address', 'logo')
                 ->first();
 
             if (!$school) {
@@ -593,4 +593,5 @@ class SchoolController extends Controller
             ], 500);
         }
     }
+    
 }

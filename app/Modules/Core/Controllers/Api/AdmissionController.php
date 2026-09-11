@@ -6,14 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Modules\Core\Models\Admission;
 use App\Modules\Core\Models\School;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
 class AdmissionController extends Controller
 {
-    /**
-     * Resolves tenant school_id safely from authenticated context.
-     */
     private function resolveSchoolId(Request $request): ?int
     {
         $user = auth()->user();
@@ -21,6 +19,18 @@ class AdmissionController extends Controller
             return $user->school_id;
         }
         return $request->query('school_id') ?? $request->input('school_id') ?? $user?->school_id;
+    }
+
+    /**
+     * Generate a unique application number with zero collision risk.
+     */
+    private function generateUniqueApplicationNumber(): string
+    {
+        do {
+            $number = 'ADM-' . date('Y') . '-' . strtoupper(Str::random(6));
+        } while (Admission::where('application_number', $number)->exists());
+
+        return $number;
     }
 
     public function index(Request $request)
@@ -38,23 +48,23 @@ class AdmissionController extends Controller
             ->with(['grade', 'school', 'schoolSession', 'admissionList']);
 
         if ($request->filled('grade_id')) {
-            $query->where('grade_id', $request->grade_id);
+            $query->where('grade_id', $request->input('grade_id'));
         }
 
         if ($request->filled('school_session_id')) {
-            $query->where('school_session_id', $request->school_session_id);
+            $query->where('school_session_id', $request->input('school_session_id'));
         }
 
         if ($request->filled('status')) {
-            $query->where('status', $request->status);
+            $query->where('status', $request->input('status'));
         }
 
         if ($request->filled('gender')) {
-            $query->where('gender', $request->gender);
+            $query->where('gender', $request->input('gender'));
         }
 
         if ($request->filled('search')) {
-            $search = $request->search;
+            $search = $request->input('search');
             $query->where(function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
                   ->orWhere('last_name', 'like', "%{$search}%")
@@ -64,11 +74,9 @@ class AdmissionController extends Controller
             });
         }
 
-        $admissions = $query->latest()->paginate(50);
-
         return response()->json([
             'status' => 'success',
-            'data' => $admissions
+            'data' => $query->latest()->paginate(50)
         ]);
     }
 
@@ -106,30 +114,13 @@ class AdmissionController extends Controller
             ], 422);
         }
 
-        $applicationNumber = 'ADM-' . date('Y') . '-' . strtoupper(Str::random(5));
-
-        $admission = Admission::create([
-            'school_id' => $schoolId,
-            'school_session_id' => $request->school_session_id,
-            'term' => $request->term,
-            'application_number' => $applicationNumber,
-            'grade_id' => $request->grade_id,
-            'prev_grade' => $request->prev_grade,
-            'prev_school' => $request->prev_school,
-            'first_name' => $request->first_name,
-            'middle_name' => $request->middle_name,
-            'last_name' => $request->last_name,
-            'gender' => $request->gender,
-            'date_of_birth' => $request->date_of_birth,
-            'phone' => $request->phone,
-            'email' => $request->email,
-            'address' => $request->address,
-            'guardian_name' => $request->guardian_name,
-            'guardian_relationship' => $request->guardian_relationship,
-            'guardian_phone' => $request->guardian_phone,
-            'guardian_email' => $request->guardian_email,
-            'status' => $request->status ?? Admission::STATUS_PENDING,
-        ]);
+        $admission = Admission::create(array_merge(
+            $validator->validated(),
+            [
+                'application_number' => $this->generateUniqueApplicationNumber(),
+                'status' => $request->input('status', Admission::STATUS_PENDING),
+            ]
+        ));
 
         return response()->json([
             'status' => 'success',
@@ -238,72 +229,94 @@ class AdmissionController extends Controller
 
     // ======================== PUBLIC ADMISSION PORTAL ENDPOINTS ========================
 
-    public function publicApply(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'school_uuid' => 'required|exists:schools,uuid',
-            'grade_id' => 'required|exists:grades,id',
-            'prev_grade' => 'nullable|string|max:255',
-            'prev_school' => 'nullable|string|max:255',
-            'first_name' => 'required|string|max:255',
-            'middle_name' => 'nullable|string|max:255',
-            'last_name' => 'required|string|max:255',
-            'gender' => 'required|string|in:male,female,other',
-            'date_of_birth' => 'nullable|date',
-            'phone' => 'required|string|max:20',
-            'email' => 'nullable|email|max:255',
-            'address' => 'nullable|string|max:500',
-            'guardian_name' => 'required|string|max:255',
-            'guardian_relationship' => 'required|string|max:100',
-            'guardian_phone' => 'required|string|max:20',
-            'guardian_email' => 'nullable|email|max:255',
-        ]);
+   public function publicApply(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'school_uuid'           => 'required|exists:schools,uuid',
+        'grade_id'              => 'required|exists:grades,id',
+        'school_session_id'     => 'required|exists:school_sessions,id',
+        'term'                  => 'nullable|string|max:50', // FIXED: Added term validation
+        'prev_grade'            => 'nullable|string|max:255',
+        'prev_school'           => 'nullable|string|max:255',
+        'first_name'            => 'required|string|max:255',
+        'middle_name'           => 'nullable|string|max:255',
+        'last_name'             => 'required|string|max:255',
+        'gender'                => 'required|string|in:male,female,other',
+        'date_of_birth'         => 'nullable|date',
+        'phone'                 => 'required|string|max:20',
+        'email'                 => 'nullable|email|max:255',
+        'address'               => 'nullable|string|max:500',
+        'guardian_name'         => 'required|string|max:255',
+        'guardian_relationship' => 'required|string|max:100',
+        'guardian_phone'        => 'required|string|max:20',
+        'guardian_email'        => 'nullable|email|max:255',
+    ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        $school = School::where('uuid', $request->school_uuid)->firstOrFail();
-
-        $applicationNumber = 'ADM-' . date('Y') . '-' . strtoupper(Str::random(5));
-
-        $admission = Admission::create([
-            'school_id' => $school->id,
-            'application_number' => $applicationNumber,
-            'grade_id' => $request->grade_id,
-            'prev_grade' => $request->prev_grade,
-            'prev_school' => $request->prev_school,
-            'first_name' => $request->first_name,
-            'middle_name' => $request->middle_name,
-            'last_name' => $request->last_name,
-            'gender' => $request->gender,
-            'date_of_birth' => $request->date_of_birth,
-            'phone' => $request->phone,
-            'email' => $request->email,
-            'address' => $request->address,
-            'guardian_name' => $request->guardian_name,
-            'guardian_relationship' => $request->guardian_relationship,
-            'guardian_phone' => $request->guardian_phone,
-            'guardian_email' => $request->guardian_email,
-            'status' => Admission::STATUS_PENDING,
-        ]);
-
+    if ($validator->fails()) {
         return response()->json([
-            'status' => 'success',
-            'message' => 'Application submitted successfully.',
-            'data' => [
-                'application_number' => $admission->application_number,
-                'applicant_name' => "{$admission->first_name} {$admission->last_name}",
-                'school_name' => $school->name,
-                'status' => $admission->status,
-            ]
-        ], 201);
+            'status' => 'error',
+            'message' => 'Validation failed',
+            'errors' => $validator->errors()
+        ], 422);
     }
 
+    $school = School::where('uuid', $request->school_uuid)
+        ->where('is_unlocked', true)
+        ->first();
+
+    if (!$school) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'School not found or portal is currently locked.'
+        ], 404);
+    }
+
+    $session = DB::table('school_sessions')
+        ->where('id', $request->school_session_id)
+        ->where('school_id', $school->id)
+        ->first();
+
+    if (!$session) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Invalid session selected for this school.'
+        ], 422);
+    }
+
+    $admission = Admission::create([
+        'school_id'             => $school->id,
+        'school_session_id'     => $session->id,
+        'term'                  => $request->term ?? $session->term ?? '', // FIXED: Uses submitted term or defaults to session term
+        'application_number'    => $this->generateUniqueApplicationNumber(),
+        'grade_id'              => $request->grade_id,
+        'prev_grade'            => $request->prev_grade ?? '',
+        'prev_school'           => $request->prev_school,
+        'first_name'            => $request->first_name,
+        'middle_name'           => $request->middle_name,
+        'last_name'             => $request->last_name,
+        'gender'                => $request->gender,
+        'date_of_birth'         => $request->date_of_birth,
+        'phone'                 => $request->phone,
+        'email'                 => $request->email,
+        'address'               => $request->address ?? '',
+        'guardian_name'         => $request->guardian_name,
+        'guardian_relationship' => $request->guardian_relationship,
+        'guardian_phone'        => $request->guardian_phone,
+        'guardian_email'        => $request->guardian_email,
+        'status'                => Admission::STATUS_PENDING,
+    ]);
+
+    return response()->json([
+        'status' => 'success',
+        'message' => 'Application submitted successfully.',
+        'data' => [
+            'application_number' => $admission->application_number,
+            'applicant_name'     => trim("{$admission->first_name} {$admission->last_name}"),
+            'school_name'        => $school->name,
+            'status'             => $admission->status,
+        ]
+    ], 201);
+}
     public function publicCheckStatus(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -333,7 +346,7 @@ class AdmissionController extends Controller
             'status' => 'success',
             'data' => [
                 'application_number' => $admission->application_number,
-                'applicant_name'     => "{$admission->first_name} {$admission->last_name}",
+                'applicant_name'     => trim("{$admission->first_name} {$admission->last_name}"),
                 'school_name'        => $admission->school->name ?? null,
                 'school_logo'        => $admission->school->logo ?? null,
                 'applied_grade'      => $admission->grade->name ?? null,
